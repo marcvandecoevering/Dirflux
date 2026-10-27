@@ -7,6 +7,7 @@ import { createApp } from '../server.js';
 import { DatabaseSync } from 'node:sqlite';
 import { samplePdf } from '../scripts/fixtures.js';
 import { inflateRawSync } from 'node:zlib';
+import crypto from 'node:crypto';
 
 // Inspect the complete small test archive using its central directory. This
 // validates actual paths and decompressed bytes, not just the ZIP signature.
@@ -143,6 +144,14 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
     const hiddenShare=await json('/api/shares','POST',{path:'.hidden/résumé 日本語.txt'},201);
     const publicHidden=await fetch(base+hiddenShare.url);
     assert.equal(publicHidden.status,200);assert.equal(await publicHidden.text(),'Unicode and hidden directory content');
+    const partial=await fetch(base+hiddenShare.url,{headers:{Range:'bytes=0-6'}});
+    assert.equal(partial.status,206);assert.equal(await partial.text(),'Unicode');
+    const suffix=await fetch(base+hiddenShare.url,{headers:{Range:'bytes=-7'}});
+    assert.equal(suffix.status,206);assert.equal(await suffix.text(),'content');
+    const head=await fetch(base+hiddenShare.url,{method:'HEAD'});
+    assert.equal(head.status,200);assert.equal(await head.text(),'');assert.equal(Number(head.headers.get('content-length')),36);
+    const unsatisfied=await fetch(base+hiddenShare.url,{headers:{Range:'bytes=1000-2000'}});
+    assert.equal(unsatisfied.status,416);
     await fs.writeFile(path.join(instance.root,'video.mp4'),Buffer.from('0123456789'));
     const range = await request('/api/file?path=video.mp4','GET',undefined,{Range:'bytes=2-5'});
     assert.equal(range.status,206); assert.equal(await range.text(),'2345');
@@ -175,6 +184,19 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
     await json('/api/search?q=','GET',undefined,400);
     await json('/api/search?q='+('x'.repeat(257)),'GET',undefined,400);
   });
+  await t.test('cancelled ZIP downloads release streams without disrupting subsequent requests', async () => {
+    const folder=path.join(instance.root,'cancel-archive');await fs.mkdir(folder);
+    for(let i=0;i<4;i++)await fs.writeFile(path.join(folder,`${i}.bin`),crypto.randomBytes(256*1024));
+    const link=await json('/api/shares','POST',{path:'cancel-archive'},201);
+    for(let i=0;i<3;i++) {
+      const response=await fetch(base+link.url);assert.equal(response.status,200);
+      const reader=response.body.getReader();await reader.read();await reader.cancel();
+      assert.equal((await request('/api/health')).status,200);
+    }
+    const completed=await fetch(base+link.url);
+    const entries=archiveContents(Buffer.from(await completed.arrayBuffer()));
+    assert.deepEqual(entries.get('cancel-archive/3.bin'),await fs.readFile(path.join(folder,'3.bin')));
+  });
   await t.test('copy, move, duplicate protection, descendant checks', async () => {
     await json('/api/transfer','POST',{source:'Docs/hello.txt',target:'Docs/copy.txt',operation:'copy'});
     await json('/api/transfer','POST',{source:'Docs/copy.txt',target:'Docs/moved.txt',operation:'move'});
@@ -192,7 +214,7 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
     assert.equal(folderCopy.path,'folder.with.dots (1)');
     await json('/api/transfer','POST',{source:'Docs',target:'Docs/sub',operation:'copy',conflict:'rename'},400);
   });
-  await t.test('public download links can be revoked and are invalidated by moves', async () => {
+  await t.test('public links are revocable and follow moved files without exposing reused names', async () => {
     const share = await json('/api/shares','POST',{path:'Docs/hello.txt',hours:1},201);
     assert.equal((await fetch(base+share.url)).status,200);
     await json('/api/shares/'+share.id,'DELETE');
@@ -200,7 +222,10 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
     const another = await json('/api/shares','POST',{path:'Docs/moved.txt'},201);
     assert.equal(another.expires,0);
     await json('/api/transfer','POST',{source:'Docs/moved.txt',target:'Docs/renamed.txt',operation:'move'});
-    assert.equal((await fetch(base+another.url)).status,404);
+    await fs.writeFile(path.join(instance.root,'Docs/moved.txt'),'unrelated replacement');
+    const followed=await fetch(base+another.url);assert.equal(followed.status,200);
+    assert.equal(await followed.text(),await fs.readFile(path.join(instance.root,'Docs/renamed.txt'),'utf8'));
+    assert.equal((await json('/api/shares')).items.find(i=>i.id===another.id).path,'Docs/renamed.txt');
     await json('/api/shares','POST',{path:'Docs/hello.txt',hours:-1},400);
     const folder = await json('/api/shares','POST',{path:'Docs'},201);
     const r = await fetch(base+folder.url); assert.equal(r.status,200); assert.match(r.headers.get('content-disposition'),/zip/); await r.arrayBuffer();

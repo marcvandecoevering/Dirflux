@@ -13,6 +13,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY server.js ./
+COPY lib ./lib
 COPY --from=assets /build/public ./public
 COPY LICENSE LICENSE.droppy THIRD_PARTY_NOTICES.md ./
 RUN mkdir /files /config && chown node:node /files /config

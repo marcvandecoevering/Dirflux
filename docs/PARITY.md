@@ -15,8 +15,8 @@ Reference: silverwind/droppy commit `70b61d1ac7c2ce8045e07f4716b6a01abadf6296` (
 | Resuming interrupted uploads | Same original upload handlers | NOT an original feature: XMLHttpRequest + multipart streaming, cancellation removes temporary files. Earlier claim that missing resume was a parity gap was incorrect. |
 | Clipboard image/text upload | client/client.js uploadBlob | Implemented; needs browser clipboard validation. |
 | Search | client/client.js doSearch; server search handler | Original search inspected: case-insensitive file-name and folder-path matching, including a single character. Implemented and tested with a strict subtree boundary; Escape clears search. Large trees and browser journeys remain. |
-| Public file and directory links, ZIP | server/server.js share handler; README | Basic access, expiry, revocation and ZIP tests pass. ZIP central-directory paths and decompressed bytes, Unicode names, hidden directories, authenticated/public downloads and range are covered. Large archives remain. Original rename preserves shared links; current move/rename revokes them — still a parity gap to fix with crash-safe link remapping. Longer unguessable IDs are intentional. |
-| Editor languages, themes, font, tabs, wrap, fullscreen, find/replace/save | client/client.js editor and preferences | CodeMirror 6 implemented; manual saving/syntax/PDF and two-pane checks. Compare shortcuts, encodings, original size limits, all settings and unsaved navigation. |
+| Public file and directory links, ZIP | server/server.js share handler; README | Basic access, expiry, revocation and ZIP tests pass. ZIP central-directory paths and decompressed bytes, Unicode names, hidden directories, authenticated/public downloads and range are covered. Links now follow file and directory moves. Durable intent recovery is tested before/after rename, including replacement of the old name and an ambiguous identity that fails closed. Public downloads pin opened file handles; HEAD/range/suffix and ZIP cancellation tested. Large archives and cross-filesystem moves remain. Longer unguessable IDs are intentional. |
+| Editor languages, themes, font, tabs, wrap, fullscreen, find/replace/save | client/client.js editor and preferences | CodeMirror 6 implemented; manual saving/syntax/PDF and two-pane checks. Live theme/font/wrap preferences update both editors without recreating documents; browser checks confirm retained unsaved text and undo history. Compare other shortcuts, encodings, original size limits and unsaved navigation. |
 | Image/video touch gallery | client/client.js gallery, preferences | Basic implementation; verify formats, autoplay/next/loop, zoom, rotation, fullscreen, swipe and errors. |
 | Audio playlist, seeking | client/client.js audio handlers | Implemented; verify seeking, queue progression and playback across navigation. |
 | Real-time filesystem changes | README; server/filetree.js | SSE test passes; browser polls every 15s. Need network filesystem fallback and large-tree performance evaluation. |
@@ -51,3 +51,9 @@ Current official publishing references (checked 2026-10-28):
 - https://ca.unraid.net/submit/help
 - https://github.com/unraid/unraid-community-apps-starter
 - https://docs.github.com/en/code-security/concepts/supply-chain-security/dependabot-security-updates
+
+## Verification increment: shared links and editor preferences
+
+On Windows/Node 24.14.1, 22 tests pass. `npm run test:package` and `npm run check` pass. Browser verification used disposable demo files: both editors adopted 20px text and a changed theme; unsaved contents and undo history survived. No production user files were used.
+
+Move-recovery tests inject an interruption immediately before/after filesystem rename, close the app, reopen the same SQLite/storage directories and verify the links. These are controlled failure/restart tests, not a physical power-loss test. Recovery requires stable filesystem identity and atomic same-filesystem rename. Moves between mount points need additional implementation and Linux verification.

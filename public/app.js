@@ -18,7 +18,16 @@ let toastTimer, uploadRequest, uploadCancelled = false, closeHook = null, refres
 let editorInstance = null, currentMedia = null, clipboard = null, audioItems = [], audioIndex = 0, eventSource = null;
 const defaultPrefs = { theme:'droppy',editorFontSize:16,indentWithTabs:false,indentUnit:4,lineWrapping:false,loop:true,autonext:false,sharelinkDownload:true };
 let prefs;
-try { prefs = {...defaultPrefs,...JSON.parse(localStorage.getItem('droppy-next-prefs') || '{}')}; } catch { prefs = {...defaultPrefs}; }
+function readPreferences() {
+  let settings;try{settings={...defaultPrefs,...JSON.parse(localStorage.getItem('droppy-next-prefs')||'{}')};}catch{settings={...defaultPrefs};}
+  if(![1,2,4,8].includes(Number(settings.indentUnit)))settings.indentUnit=defaultPrefs.indentUnit;
+  if(!Number.isFinite(Number(settings.editorFontSize))||Number(settings.editorFontSize)<10||Number(settings.editorFontSize)>30)settings.editorFontSize=defaultPrefs.editorFontSize;
+  for(const name of ['indentWithTabs','lineWrapping','loop','autonext','sharelinkDownload'])if(typeof settings[name]!=='boolean')settings[name]=defaultPrefs[name];
+  if(typeof settings.theme!=='string')settings.theme=defaultPrefs.theme;
+  return settings;
+}
+prefs=readPreferences();
+window.addEventListener('storage',event=>{if(event.key==='droppy-next-prefs'){prefs=readPreferences();editorInstance?.setPreferences(prefs);}});
 const originalIcon = name => `<svg class="original-icon" aria-hidden="true"><use href="/original/icons.svg#o-${name}"/></svg>`;
 const tool = (action,icon,label,extra='') => `<button class="classic-button ${extra}" data-tool="${action}" aria-label="${label}" title="${label}">${originalIcon(icon)}</button>`;
 function paneNav() {
@@ -331,7 +340,7 @@ async function openFile(item, index, forceText=false) {
   $('#syntax').innerHTML=['Plain text',...extras.modes].map(mode=>`<option>${escape(mode)}</option>`).join('');$('#syntax').value=editorInstance.modeName;
   on($('#syntax'),'change',e=>editorInstance.mode(e.target.value));on($('#save'),'click',save);
   $('#editor-find').onclick=()=>editorInstance.find();$('#editor-download').onclick=()=>download(item);
-  $('#wrap').onclick=()=>{prefs.lineWrapping=!prefs.lineWrapping;editorInstance.wrap(prefs.lineWrapping);};
+    $('#wrap').onclick=()=>{prefs.lineWrapping=!prefs.lineWrapping;editorInstance.wrap(prefs.lineWrapping);localStorage.setItem('droppy-next-prefs',JSON.stringify(prefs));};
   $('#fullscreen').onclick=()=>(viewerMode?window.parent.postMessage({type:'droppy-fullscreen'},location.origin):$('#dialog').classList.toggle('fullscreen-dialog'));
   closeHook=()=>!state.dirty||confirm('Wijzigingen zijn nog niet opgeslagen. Toch sluiten?');
   editorInstance.focus();

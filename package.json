@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "BSD-2-Clause",
-  "files": ["server.js", "public/", "src/", "scripts/assets.js", "scripts/ensure-assets.js", "README.md", "SECURITY.md", "LICENSE", "LICENSE.droppy", "THIRD_PARTY_NOTICES.md", "docs/", "Dockerfile", "compose.yaml", ".env.example"],
+  "files": ["server.js", "lib/", "public/", "src/", "scripts/assets.js", "scripts/ensure-assets.js", "README.md", "SECURITY.md", "LICENSE", "LICENSE.droppy", "THIRD_PARTY_NOTICES.md", "docs/", "Dockerfile", "compose.yaml", ".env.example"],
   "type": "module",
   "description": "Zelfstandige opvolger voor droppy, voor je eigen server",
   "engines": {

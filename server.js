@@ -6,9 +6,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { pipeline } from 'node:stream/promises';
-import { Transform } from 'node:stream';
+import { Transform, Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { ZipArchive } from 'archiver';
+import { createMoveJournal } from './lib/moves.js';
+import { sendOpenedFile } from './lib/download.js';
 
 const scrypt = promisify(crypto.scrypt);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -33,11 +35,15 @@ export async function createApp(options = {}) {
   await fsp.mkdir(trashDir, { recursive: true });
   const db = new DatabaseSync(path.join(config, 'state.sqlite'));
   db.exec(`PRAGMA journal_mode=WAL;
+    PRAGMA synchronous=FULL;
     CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL, role TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, csrf TEXT NOT NULL, expires INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS shares (id TEXT PRIMARY KEY, path TEXT NOT NULL, expires INTEGER NOT NULL, owner TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS trash (id TEXT PRIMARY KEY, path TEXT NOT NULL, deleted INTEGER NOT NULL, owner TEXT NOT NULL);`);
+  const moves=createMoveJournal(db,resolve,options.moveCheckpoint);
+  try { await moves.recover(); } catch(error) {db.close();throw error;}
   const app = express();
+  let closed=false;
   const eventClients = new Set();
   const sizeCache = new Map();
   let watchTimer;
@@ -188,15 +194,30 @@ export async function createApp(options = {}) {
   app.get('/s/:id', async (req, res) => {
     const share = db.prepare('SELECT * FROM shares WHERE id=? AND (expires=0 OR expires>?)').get(req.params.id, Date.now());
     if (!share) throw fail(404, 'Deze downloadlink is verlopen of ingetrokken.');
+    const assertCurrent = () => {
+      if(closed)throw fail(503,'De server wordt afgesloten.');
+      const current=db.prepare('SELECT path,expires FROM shares WHERE id=?').get(share.id);
+      if(!current||(current.expires!==0&&current.expires<=Date.now()))throw fail(404,'Deze downloadlink is verlopen of ingetrokken.');
+      if(current.path!==share.path||moves.blocks(share.path))throw fail(503,'Dit bestand wordt verplaatst. Probeer het later opnieuw.');
+    };
+    assertCurrent();
     const { absolute } = await resolve(share.path);
-    if ((await fsp.stat(absolute)).isDirectory()) return zip(share.path, res);
-    if (req.query.download === '0') {
-      const ext = path.extname(absolute).toLowerCase();
-      if (['.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac','.pdf'].includes(ext)) return res.sendFile(absolute, {dotfiles:'allow'});
-      const st = await fsp.stat(absolute);
-      if (st.size < 2 * 1024 ** 2) { const bytes = await fsp.readFile(absolute); if (!bytes.includes(0)) return res.type('text/plain').send(bytes); }
-    }
-    res.download(absolute, {dotfiles:'allow'});
+    if ((await fsp.stat(absolute)).isDirectory()) return zip(share.path, res, assertCurrent);
+    const handle=await fsp.open(absolute,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));
+    try {
+      let inline=false;
+      if(req.query.download==='0') {
+        const ext=path.extname(absolute).toLowerCase();
+        inline=['.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac','.pdf'].includes(ext);
+        if(!inline&&(await handle.stat()).size<2*1024**2) {
+          const bytes=await handle.readFile();
+          assertCurrent();
+          if(!bytes.includes(0))return res.type('text/plain').send(bytes);
+        }
+      }
+      assertCurrent();
+      await sendOpenedFile(req,res,handle,path.basename(absolute),inline);
+    } finally {await handle.close();}
   });
   app.use('/api', (req, _res, next) => {
     if (!req.auth) return next(fail(401, 'Log in om verder te gaan.'));
@@ -223,6 +244,7 @@ export async function createApp(options = {}) {
     await previous;
     try {
       if (req.aborted || res.destroyed) return;
+      if (moves.hasPending()) throw fail(503, 'Een onderbroken verplaatsing moet eerst worden hersteld. Herstart de server.');
       if (!db.prepare('SELECT id FROM sessions WHERE id=? AND expires>?').get(req.auth.session_id, Date.now())) throw fail(401, 'Je sessie is verlopen.');
       await handler(req, res, next);
     } catch (error) { next(error); }
@@ -287,20 +309,36 @@ export async function createApp(options = {}) {
     if (path.extname(absolute).toLowerCase() !== '.pdf') throw fail(415, 'Dit is geen PDF-bestand.');
     res.type('application/pdf').set('Content-Disposition', 'attachment').sendFile(absolute, {dotfiles:'allow'});
   });
-  async function zip(relative, res) {
+  async function zip(relative, res, guard = () => {}) {
     const items = await walk(relative);
+    if(res.destroyed)return;
+    guard();
     const archive = new ZipArchive({ zlib: { level: 5 } });
+    const streams=new Set();
     res.attachment((path.posix.basename(relative) || 'bestanden') + '.zip');
     archive.on('error', error => res.destroy(error));
     archive.on('warning', error => res.destroy(error));
-    res.on('close', () => { if (!res.writableEnded) archive.abort(); });
+    res.on('close', () => { if (!res.writableEnded) {archive.abort();for(const stream of streams)stream.destroy();} });
     archive.pipe(res);
     const base = relative ? path.posix.dirname(relative) : '';
     for (const item of items) {
       const name = base && base !== '.' ? item.path.slice(base.length + 1) : item.path;
       if (!name) continue;
       if (item.directory) archive.append('', { name: name + '/' });
-      else archive.file(item.absolute, { name });
+      else {
+        const stream=Readable.from((async function* () {
+        const checked=await resolve(item.path);
+        const handle=await fsp.open(checked.absolute,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));
+        try {
+          guard();
+          yield* handle.createReadStream({autoClose:true});
+        } finally {await handle.close();}
+        })());
+        streams.add(stream);
+        stream.once('close',()=>streams.delete(stream));
+        stream.on('error',error=>{archive.abort();res.destroy(error);for(const other of streams)other.destroy();});
+        archive.append(stream,{name,date:new Date(item.modified)});
+      }
     }
     await archive.finalize();
   }
@@ -399,9 +437,7 @@ export async function createApp(options = {}) {
     await absent(target.absolute);
     await walk(source.relative); // Validate descendants before recursive filesystem operations.
     if (req.body.operation === 'copy') await fsp.cp(source.absolute, target.absolute, { recursive: true, force: false, errorOnExist: true, filter: async p => !(await fsp.lstat(p)).isSymbolicLink() });
-    else await fsp.rename(source.absolute, target.absolute);
-    // Existing shares must never silently point to an unrelated replacement file after a move.
-    if (req.body.operation === 'move') revokePath(source.relative);
+    else await moves.move(source,target);
     res.json({ ok: true, path:target.relative });
   });
   function revokePath(relative) {
@@ -500,7 +536,7 @@ export async function createApp(options = {}) {
     res.status(status).json({ error: mapped?.[1] || (duplicate ? 'Deze gebruikersnaam bestaat al.' : status === 500 ? 'Er ging iets mis op de server.' : error.message) });
   });
   const stopEvents = () => {watcher.close();clearTimeout(watchTimer);for(const client of eventClients)client.end();};
-  return { app, stopEvents, close: () => {stopEvents();db.close();}, root, config, setupTokenRequired: !countUsers() };
+  return { app, stopEvents, close: () => {if(closed)return;closed=true;stopEvents();db.close();}, root, config, setupTokenRequired: !countUsers() };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

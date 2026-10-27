@@ -8,7 +8,7 @@ The implementation uses Node.js 24, Express, SQLite, CodeMirror 6 and PDF.js. Br
 
 [Functional comparison and release gates](docs/PARITY.md) records the reference behavior, available evidence and outstanding work. Existing droppy users, credentials, files, links and configuration do not need migration and are not imported. The new UI may differ visually while preserving the original capabilities.
 
-Current verification on Windows: 18 API integration tests pass, upload replace/keep-both flows were checked in a browser, and the native release archive starts after a clean production-only installation. GitHub CI is configured for Windows, Linux and macOS, plus a restricted Linux container test; these workflows have **not yet run on GitHub**. The local Docker engine is unavailable, so container support is not yet verified.
+Current verification on Windows: 22 automated tests pass, upload replace/keep-both flows were checked in a browser, and the native release archive starts after a clean production-only installation. GitHub CI is configured for Windows, Linux and macOS, plus a restricted Linux container test; these workflows have **not yet run on GitHub**. The local Docker engine is unavailable, so container support is not yet verified.
 
 ## Run from source
 
@@ -68,9 +68,9 @@ The smoke test uses temporary data, UID/GID 99:100, a read-only container root, 
 - Directory browsing, sorting, navigation history and two independent file/editor panes.
 - File and folder creation, rename, move, copy, clipboard operations and search.
 - Multiple-file and folder uploads, drag/drop, progress and cancellation. Conflicts offer replace, keep both or skip. Replacements verify the original target version again before committing.
-- Text editing with syntax highlighting, themes, find/replace, indentation, wrapping and save-conflict checks.
+- Text editing with syntax highlighting, themes, find/replace, indentation, wrapping and save-conflict checks. Preference changes update both open editors without discarding unsaved text or undo history.
 - Image/video gallery, audio playback, PDF viewer and byte-range media requests.
-- File downloads, directory ZIP archives and revocable public links with optional expiration.
+- File downloads, directory ZIP archives and revocable public links with optional expiration. Links follow file and directory renames/moves. Pending moves temporarily suspend affected links; startup recovers their destinations using the persisted move intent and filesystem identity.
 - Recoverable trash, restoration and explicit permanent removal.
 - Administrator, editor and viewer accounts; administrators can edit roles and reset other users’ passwords, revoking their sessions. Own password changes require the current password.
 - Filesystem notifications over SSE with a 15-second browser polling fallback.
@@ -98,11 +98,12 @@ For an HTTPS reverse proxy, enable `COOKIE_SECURE=true` and preserve the origina
 - Passwords use salted scrypt. Session cookies are HttpOnly and SameSite=Strict; sessions expire after seven days. Mutations require a CSRF token and check browser Origin when present.
 - Initial account creation requires the server-side one-time installation code. Public/no-login browsing is not implemented yet.
 - Paths reject traversal, Windows alternate streams/device names and symbolic links/junctions. User HTML/SVG is not rendered as executable content under the app origin. Internal `.app-tmp-` paths cannot be accessed through file APIs.
+- Same-filesystem moves use atomic rename and a SQLite intent journal. An ambiguous interrupted move prevents startup rather than guessing a link destination. Preserve both storage directories and investigate the recorded operation before recovery; do not discard the journal. Cross-filesystem moves are not implemented yet.
 - Application mutations are serialized. External processes can still modify the same filesystem independently; this application is not a sandbox against a hostile process with write access to its storage. Use one app process per configuration directory.
 - ZIP, recursive copy and search currently cap a tree at 25,000 items; search displays at most 1,000 results. Large-tree parity and performance remain release work.
 - The text editor currently supports UTF-8 files up to 2 MiB. Browser folder uploads omit empty folders. Interrupted uploads are not resumable; the original droppy upload handler also did not implement resuming.
 - Media format support depends on the browser; there is no transcoding. Office and unsupported binary files download instead of previewing.
-- Shared-link preservation on rename, advanced gallery behavior, no-login mode and several original server settings still require parity work. See the comparison rather than assuming complete parity from this feature summary.
+- Cross-filesystem moves, advanced gallery behavior, no-login mode and several original server settings still require parity work. See the comparison rather than assuming complete parity from this feature summary.
 - Uploads stage in `/config/tmp`; reserve enough disk space. Atomic publication uses a temporary sibling file and hard links for new files, which requires filesystem hard-link support. Replaced files are not versioned. Trash occupies space until permanently removed.
 - For consistent backups, stop the app and back up both the files directory and the entire configuration directory, including SQLite WAL files if present. Upgrade and rollback procedures still need end-to-end verification.
 
