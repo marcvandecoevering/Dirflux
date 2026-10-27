@@ -21,6 +21,14 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 const day = 86400000;
 
 export async function createApp(options = {}) {
+  function byteLimit(value, name, minimum, maximum = Number.MAX_SAFE_INTEGER) {
+    if (!['number','string'].includes(typeof value) || String(value).trim() === '') throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
+    const result=Number(value);
+    if (!Number.isSafeInteger(result) || result < minimum || result > maximum) throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
+    return result;
+  }
+  const maxUpload = byteLimit(options.maxUpload ?? process.env.MAX_UPLOAD_BYTES ?? 10 * 1024 ** 3,'MAX_UPLOAD_BYTES',0);
+  const maxText = byteLimit(options.maxText ?? process.env.MAX_TEXT_BYTES ?? 2 * 1024 ** 2,'MAX_TEXT_BYTES',1,64 * 1024 ** 2);
   let ignorePatterns = options.ignorePatterns;
   if (ignorePatterns === undefined) {
     try { ignorePatterns = JSON.parse(process.env.IGNORE_PATTERNS || '[]'); }
@@ -80,7 +88,6 @@ export async function createApp(options = {}) {
   const pollTimer = pollingInterval ? setInterval(() => {sizeCache.clear();emitChange();}, pollingInterval) : undefined;
   pollTimer?.unref();
   app.disable('x-powered-by');
-  const maxUpload = Number(options.maxUpload || process.env.MAX_UPLOAD_BYTES || 10 * 1024 ** 3);
   const readOnly = options.readOnly ?? process.env.READ_ONLY === 'true';
   const secure = process.env.COOKIE_SECURE === 'true';
   const attempts = new Map();
@@ -185,7 +192,17 @@ export async function createApp(options = {}) {
     next();
   });
   const jsonBody = express.json({ limit: '3mb' });
-  app.use((req,res,next) => req.method === 'PUT' && req.path === '/api/upload' ? next() : jsonBody(req,res,next));
+  // JSON escaping can expand one text byte to six bytes (for example \u0001).
+  const textBody = express.json({limit:6 * maxText + 65536});
+  app.use((req,res,next) => {
+    if (req.method === 'PUT' && req.path === '/api/upload') return next();
+    if (req.method === 'POST' && req.path === '/api/text') {
+      if (!req.auth) return next(fail(401,'Log in om verder te gaan.'));
+      if (readOnly || req.auth.role === 'viewer' || req.get('x-csrf-token') !== req.auth.csrf) return next(fail(403,'Geen toestemming om tekst op te slaan.'));
+      return textBody(req,res,next);
+    }
+    return jsonBody(req,res,next);
+  });
   app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'droppy-next', version: '0.1.0' }));
   app.get('/api/session', (req, res) => res.json({ setup: countUsers() === 0, setupTokenRequired: countUsers() === 0, user: req.auth ? publicUser(req.auth) : null, csrf: req.auth?.csrf, readOnly }));
   const throttle = (req, _res, next) => {
@@ -378,7 +395,7 @@ export async function createApp(options = {}) {
   app.get('/api/text', async (req, res) => {
     const { absolute } = await resolve(req.query.path);
     const st = await fsp.stat(absolute);
-    if (!st.isFile() || st.size > 2 * 1024 ** 2) throw fail(413, 'De teksteditor ondersteunt bestanden tot 2 MB.');
+    if (!st.isFile() || st.size > maxText) throw fail(413, `De teksteditor ondersteunt bestanden tot ${maxText} bytes.`);
     const bytes = await fsp.readFile(absolute);
     if (bytes.includes(0)) throw fail(415, 'Dit is een binair bestand. Download het om te openen.');
     let text; try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { throw fail(415, 'Alleen UTF-8-tekst kan worden bewerkt.'); }
@@ -386,7 +403,8 @@ export async function createApp(options = {}) {
   });
   write.post('/api/text', writable, async (req, res) => {
     const { absolute } = await resolve(req.body.path);
-    if (typeof req.body.text !== 'string' || Buffer.byteLength(req.body.text) > 2 * 1024 ** 2) throw fail(413, 'Maximaal 2 MB tekst.');
+    if (typeof req.body.text !== 'string' || Buffer.byteLength(req.body.text) > maxText) throw fail(413, `Maximaal ${maxText} bytes tekst.`);
+    if ((await fsp.stat(absolute)).size > maxText) throw fail(413, 'Het bestand is groter dan de ingestelde tekstlimiet.');
     if (hash(await fsp.readFile(absolute)) !== req.body.version) throw fail(409, 'Het bestand is ondertussen gewijzigd. Open het opnieuw voordat je opslaat.');
     const temp = path.join(path.dirname(absolute), '.app-tmp-' + crypto.randomUUID());
     try {
@@ -416,7 +434,7 @@ export async function createApp(options = {}) {
     }
   });
   write.put('/api/upload', writable, async (req, res) => {
-    if (Number(req.headers['content-length']) > maxUpload) throw fail(413, 'Bestand is groter dan de uploadlimiet.');
+    if (maxUpload && Number(req.headers['content-length']) > maxUpload) throw fail(413, 'Bestand is groter dan de uploadlimiet.');
     let { absolute, relative } = await resolve(req.query.path, false);
     if (!relative) throw fail(400, 'Geef een bestandsnaam op.');
     const conflict = req.query.conflict || 'reject';
@@ -430,7 +448,7 @@ export async function createApp(options = {}) {
     const temporary = path.join(tmp, crypto.randomUUID());
     let staged;
     let bytes = 0;
-    const limit = new Transform({ transform(chunk, _encoding, cb) { bytes += chunk.length; cb(bytes > maxUpload ? fail(413, 'Bestand is groter dan de uploadlimiet.') : null, chunk); } });
+    const limit = new Transform({ transform(chunk, _encoding, cb) { bytes += chunk.length; cb(maxUpload && bytes > maxUpload ? fail(413, 'Bestand is groter dan de uploadlimiet.') : null, chunk); } });
     try {
       await pipeline(req, limit, fs.createWriteStream(temporary, { flags: 'wx' }));
       await resolve(relative, false);

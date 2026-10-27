@@ -87,7 +87,8 @@ Environment variables are read from the process. To use `.env`, copy `.env.examp
 | `PORT` | `8094` | HTTP port |
 | `FILES_DIR` | `data/files` | User files; container `/files` |
 | `CONFIG_DIR` | `data/config` | SQLite, setup code, temporary uploads and trash; container `/config` |
-| `MAX_UPLOAD_BYTES` | `10737418240` | Maximum upload size, 10 GiB by default |
+| `MAX_UPLOAD_BYTES` | `10737418240` | Maximum upload size, 10 GiB by default; `0` removes the application size limit |
+| `MAX_TEXT_BYTES` | `2097152` | Maximum UTF-8 editor file size in bytes; configurable from 1 byte to 64 MiB |
 | `READ_ONLY` | `false` | Deny file changes and new public links |
 | `WATCH` | `true` | Enable native recursive filesystem notifications |
 | `IGNORE_PATTERNS` | `[]` | JSON array of root-relative glob patterns, for example `["**/*.tmp","**/.env","private"]` |
