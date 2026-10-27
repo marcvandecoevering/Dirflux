@@ -6,6 +6,29 @@ import path from 'node:path';
 import { createApp } from '../server.js';
 import { DatabaseSync } from 'node:sqlite';
 import { samplePdf } from '../scripts/fixtures.js';
+import { inflateRawSync } from 'node:zlib';
+
+// Inspect the complete small test archive using its central directory. This
+// validates actual paths and decompressed bytes, not just the ZIP signature.
+function archiveContents(bytes) {
+  const end=bytes.length-22;
+  assert.equal(bytes.readUInt32LE(end),0x06054b50);
+  const count=bytes.readUInt16LE(end+10),items=new Map();
+  let at=bytes.readUInt32LE(end+16);
+  for(let n=0;n<count;n++) {
+    assert.equal(bytes.readUInt32LE(at),0x02014b50);
+    const method=bytes.readUInt16LE(at+10),size=bytes.readUInt32LE(at+20);
+    const nameLength=bytes.readUInt16LE(at+28),extraLength=bytes.readUInt16LE(at+30),commentLength=bytes.readUInt16LE(at+32);
+    const local=bytes.readUInt32LE(at+42),name=bytes.subarray(at+46,at+46+nameLength).toString('utf8');
+    assert.equal(bytes.readUInt32LE(local),0x04034b50);
+    const start=local+30+bytes.readUInt16LE(local+26)+bytes.readUInt16LE(local+28);
+    assert.ok(method===0||method===8,'Expected stored or deflate entry');
+    const packed=bytes.subarray(start,start+size);
+    items.set(name,method===8?inflateRawSync(packed):packed);
+    at+=46+nameLength+extraLength+commentLength;
+  }
+  return items;
+}
 
 test('file manager integration: accounts, files, permissions, conflicts and sharing', async t => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'droppy-next-test-'));
@@ -107,6 +130,19 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
     const result = await json('/api/search?q=hello'); assert.equal(result.items.length,1);
     const file = await request('/api/file?path=Docs/hello.txt&download=1'); assert.match(file.headers.get('content-disposition'),/attachment/);
     const zip = await request('/api/zip?path=Docs'); const bytes = Buffer.from(await zip.arrayBuffer()); assert.equal(bytes.readUInt16LE(),0x4b50);
+    const entries=archiveContents(bytes);
+    assert.ok(entries.has('Docs/'));
+    assert.deepEqual(entries.get('Docs/hello.txt'),await fs.readFile(path.join(instance.root,'Docs/hello.txt')));
+    await fs.mkdir(path.join(instance.root,'.hidden'));
+    await fs.writeFile(path.join(instance.root,'.hidden','résumé 日本語.txt'),'Unicode and hidden directory content');
+    const hidden=await request('/api/file?path='+encodeURIComponent('.hidden/résumé 日本語.txt')+'&download=1');
+    assert.equal(hidden.status,200);assert.equal(await hidden.text(),'Unicode and hidden directory content');
+    const hiddenZip=await request('/api/zip?path=.hidden');
+    const hiddenEntries=archiveContents(Buffer.from(await hiddenZip.arrayBuffer()));
+    assert.equal(hiddenEntries.get('.hidden/résumé 日本語.txt').toString(),'Unicode and hidden directory content');
+    const hiddenShare=await json('/api/shares','POST',{path:'.hidden/résumé 日本語.txt'},201);
+    const publicHidden=await fetch(base+hiddenShare.url);
+    assert.equal(publicHidden.status,200);assert.equal(await publicHidden.text(),'Unicode and hidden directory content');
     await fs.writeFile(path.join(instance.root,'video.mp4'),Buffer.from('0123456789'));
     const range = await request('/api/file?path=video.mp4','GET',undefined,{Range:'bytes=2-5'});
     assert.equal(range.status,206); assert.equal(await range.text(),'2345');
@@ -126,12 +162,35 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
     try{while(!text.includes('event: change'))text+=new TextDecoder().decode((await reader.read()).value);assert.match(text,/event: change/);}
     finally{await reader.cancel();clearTimeout(timeout);abort.abort();}
   });
+  await t.test('search accepts one character and matches folder paths without escaping its scope', async () => {
+    await fs.mkdir(path.join(instance.root,'Scope','Matched','Nested'),{recursive:true});
+    await fs.mkdir(path.join(instance.root,'Scope-other'),{recursive:true});
+    await fs.writeFile(path.join(instance.root,'Scope','a.txt'),'one character');
+    await fs.writeFile(path.join(instance.root,'Scope-other','a.txt'),'outside search scope');
+    const one=await json('/api/search?path=Scope&q=A');
+    assert.ok(one.items.some(i=>i.path==='Scope/a.txt'));
+    assert.equal(one.items.some(i=>i.path.startsWith('Scope-other/')),false);
+    const folders=await json('/api/search?path=Scope&q=matched');
+    assert.deepEqual(folders.items.map(i=>i.path).sort(),['Scope/Matched','Scope/Matched/Nested']);
+    await json('/api/search?q=','GET',undefined,400);
+    await json('/api/search?q='+('x'.repeat(257)),'GET',undefined,400);
+  });
   await t.test('copy, move, duplicate protection, descendant checks', async () => {
     await json('/api/transfer','POST',{source:'Docs/hello.txt',target:'Docs/copy.txt',operation:'copy'});
     await json('/api/transfer','POST',{source:'Docs/copy.txt',target:'Docs/moved.txt',operation:'move'});
     await json('/api/transfer','POST',{source:'Docs/hello.txt',target:'Docs/moved.txt',operation:'copy'},409);
     await json('/api/transfer','POST',{source:'Docs',target:'Docs/sub',operation:'copy'},400);
     await json('/api/transfer','POST',{source:'',target:'rootcopy',operation:'copy'},400);
+    const duplicate=await json('/api/transfer','POST',{source:'Docs/hello.txt',target:'Docs/hello.txt',operation:'copy',conflict:'rename'});
+    assert.equal(duplicate.path,'Docs/hello (1).txt');
+    assert.equal(await fs.readFile(path.join(instance.root,duplicate.path),'utf8'),await fs.readFile(path.join(instance.root,'Docs/hello.txt'),'utf8'));
+    const moved=await json('/api/transfer','POST',{source:duplicate.path,target:'Docs/hello.txt',operation:'move',conflict:'rename'});
+    assert.equal(moved.path,'Docs/hello (2).txt');
+    await assert.rejects(fs.stat(path.join(instance.root,duplicate.path)),{code:'ENOENT'});
+    await json('/api/create','POST',{path:'folder.with.dots',directory:true},201);
+    const folderCopy=await json('/api/transfer','POST',{source:'folder.with.dots',target:'folder.with.dots',operation:'copy',conflict:'rename'});
+    assert.equal(folderCopy.path,'folder.with.dots (1)');
+    await json('/api/transfer','POST',{source:'Docs',target:'Docs/sub',operation:'copy',conflict:'rename'},400);
   });
   await t.test('public download links can be revoked and are invalidated by moves', async () => {
     const share = await json('/api/shares','POST',{path:'Docs/hello.txt',hours:1},201);
@@ -199,6 +258,35 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
     await json('/api/trash/'+removed.id,'DELETE',undefined,404);
     await json('/api/trash/'+encodeURIComponent('../outside'),'DELETE',undefined,404);
     await json('/api/users/'+editor.id,'DELETE');
+  });
+  await t.test('administrators can change roles and reset passwords, revoking every target session', async () => {
+    const user=await json('/api/users','POST',{name:'managed',password:'managed-initial-password',role:'editor'},201);
+    const credentials=async password=>{
+      const response=await request('/api/login','POST',{name:user.name,password});
+      assert.equal(response.status,200,await response.clone().text());
+      const body=await response.json();return {Cookie:response.headers.get('set-cookie').split(';')[0],'X-CSRF-Token':body.csrf};
+    };
+    const first=await credentials('managed-initial-password'),second=await credentials('managed-initial-password');
+    const forbidden=await fetch(base+'/api/users/'+user.id,{method:'PUT',headers:{...first,'Content-Type':'application/json'},body:JSON.stringify({role:'admin'})});
+    assert.equal(forbidden.status,403);
+    const self=(await json('/api/session')).user;
+    await json('/api/users/'+self.id,'PUT',{role:'viewer'},400);
+    await json('/api/users/'+user.id,'PUT',{password:'short'},400);
+    await json('/api/users/'+user.id,'PUT',{role:'unknown'},400);
+    await json('/api/users/'+user.id,'PUT',{role:'editor'});
+    assert.equal((await fetch(base+'/api/files',{headers:first})).status,200,'No-op update keeps sessions');
+    const updated=await json('/api/users/'+user.id,'PUT',{role:'viewer'});assert.equal(updated.role,'viewer');
+    for(const headers of [first,second])assert.equal((await fetch(base+'/api/files',{headers})).status,401);
+    const reader=await credentials('managed-initial-password');
+    assert.equal((await fetch(base+'/api/create',{method:'POST',headers:{...reader,'Content-Type':'application/json'},body:JSON.stringify({path:'forbidden.txt'})})).status,403);
+    await json('/api/users/'+user.id,'PUT',{role:'admin',password:'managed-replacement-password'});
+    assert.equal((await fetch(base+'/api/files',{headers:reader})).status,401);
+    await json('/api/login','POST',{name:user.name,password:'managed-initial-password'},401);
+    const promoted=await credentials('managed-replacement-password');
+    assert.equal((await fetch(base+'/api/users',{headers:promoted})).status,200);
+    assert.equal((await json('/api/users')).items.find(i=>i.id===user.id).role,'admin');
+    await json('/api/users/'+user.id,'DELETE');
+    await json('/api/users/'+user.id,'PUT',{role:'editor'},404);
   });
   await t.test('password change rotates credentials and revokes existing sessions', async () => {
     const oldCookie = cookie;

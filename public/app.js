@@ -168,6 +168,7 @@ function renderPane(index) {
   }));
   if(pane.query){el.querySelector('.classic-search').classList.add('expanded');el.querySelector('.classic-search input').value=pane.query;}
   on(el.querySelector('.classic-search input'),'search',async e=>{pane.query=e.target.value.trim();await loadPane(index);});
+  on(el.querySelector('.classic-search input'),'keydown',async e=>{if(e.key==='Escape'){e.preventDefault();await navigate(index,pane.path);}});
   on(el.querySelector('.classic-search'),'submit',async e=>{e.preventDefault();pane.query=el.querySelector('.classic-search input').value.trim();await loadPane(index);});
   el.onpointerdown = () => setActive(index);
   el.querySelectorAll('[data-path]').forEach(b => on(b, 'click', () => navigate(index, b.dataset.path)));
@@ -195,7 +196,7 @@ function renderPane(index) {
   on(el, 'drop', async e => {
     e.preventDefault(); el.classList.remove('drop-target'); setActive(index); if (!canWrite()) return;
     const internal=e.dataTransfer.getData('application/x-droppy-path');
-    if(internal){const item=JSON.parse(internal);return formDialog('Move or copy', '<label>Operation<select name="operation"><option value="move">Move</option><option value="copy">Copy</option></select></label>', 'Apply',async form=>{await api('/transfer',{method:'POST',body:{source:item.path,target:join(pane.path,item.name),operation:form.get('operation')}});},item.name+' → /'+pane.path);}
+    if(internal){const item=JSON.parse(internal);return formDialog('Move or copy', '<label>Operation<select name="operation"><option value="move">Move</option><option value="copy">Copy</option></select></label>', 'Apply',async form=>{await api('/transfer',{method:'POST',body:{source:item.path,target:join(pane.path,item.name),operation:form.get('operation'),conflict:'rename'}});},item.name+' → /'+pane.path);}
     const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
     const files = [];
     async function collect(entry, prefix = '') {
@@ -248,13 +249,13 @@ async function action(actionName, item, index) {
 async function transfer(items, operation) {
   const other = state.panes[state.active === 0 ? 1 : 0];
   return formDialog(operation === 'copy' ? 'Bestanden kopiëren' : 'Bestanden verplaatsen', `<label>Doelmap<input name="destination" value="${escape(other?.path || '')}" placeholder="Leeg = hoofdmap"></label>`, operation === 'copy' ? 'Kopiëren' : 'Verplaatsen', async form => {
-    for (const item of items) await api('/transfer', { method:'POST', body:{ source:item.path, target:join(form.get('destination').replace(/^\/+|\/+$/g, ''), item.name), operation } });
+    for (const item of items) await api('/transfer', { method:'POST', body:{ source:item.path, target:join(form.get('destination').replace(/^\/+|\/+$/g, ''), item.name), operation, conflict:'rename' } });
     active().selected.clear(); toast(`${items.length} item(s) ${operation === 'copy' ? 'gekopieerd' : 'verplaatst'}.`);
-  }, `${items.length} item(s). Voer een bestaande map in, bijvoorbeeld Documenten/Archief. Bestaande bestanden worden niet overschreven.`);
+  }, `${items.length} item(s). Voer een bestaande map in, bijvoorbeeld Documenten/Archief. Bij een naamconflict wordt een vrije naam gekozen; beide items blijven bewaard.`);
 }
 async function pasteFiles(destination) {
   if (!clipboard || !canWrite()) return;
-  for (const item of clipboard.items) await api('/transfer',{method:'POST',body:{source:item.path,target:join(destination,item.name),operation:clipboard.operation}});
+  for (const item of clipboard.items) await api('/transfer',{method:'POST',body:{source:item.path,target:join(destination,item.name),operation:clipboard.operation,conflict:'rename'}});
   if(clipboard.operation==='move')clipboard=null;
   renderPanes();await refreshAll();toast('Files pasted.');
 }
@@ -371,7 +372,14 @@ async function showTrash() {
 async function showUsers() {
   const { items } = await api('/users');
   const roles = { admin:'Beheerder', editor:'Bewerken', viewer:'Alleen lezen' };
-  showDialog('Gebruikers', `<p>Alle gebruikers zien dezelfde bestandenmap. Lezers kunnen alleen bekijken en downloaden.</p><div class="detail-list">${items.map(i => `<div class="detail-item">${icons('user')}<div><strong>${escape(i.name)}</strong><small>${roles[i.role]}</small></div>${i.id !== state.user.id ? `<button data-delete-user="${i.id}" class="danger">Verwijderen</button>` : '<small>Jij</small>'}</div>`).join('')}</div><div class="dialog-actions"><button id="add-user" class="primary">Gebruiker toevoegen</button></div>`);
+  showDialog('Gebruikers', `<p>Alle gebruikers zien dezelfde bestandenmap. Lezers kunnen alleen bekijken en downloaden.</p><div class="detail-list">${items.map(i => `<div class="detail-item">${icons('user')}<div><strong>${escape(i.name)}</strong><small>${roles[i.role]}</small></div>${i.id !== state.user.id ? `<button data-edit-user="${i.id}" class="secondary">Wijzigen</button><button data-delete-user="${i.id}" class="danger">Verwijderen</button>` : '<small>Jij</small>'}</div>`).join('')}</div><div class="dialog-actions"><button id="add-user" class="primary">Gebruiker toevoegen</button></div>`);
+  $$('[data-edit-user]').forEach(button => on(button,'click',() => {
+    const user=items.find(i=>i.id===button.dataset.editUser);
+    return formDialog('Gebruiker wijzigen', `<label>Rol<select name="role">${Object.entries(roles).map(([value,label])=>`<option value="${value}" ${user.role===value?'selected':''}>${label}</option>`).join('')}</select></label><label>Nieuw wachtwoord (optioneel)<input name="password" type="password" minlength="12" maxlength="1024" autocomplete="new-password" placeholder="Leeg laten om te behouden"></label>`, 'Opslaan',async form=>{
+      const body={role:form.get('role')};if(form.get('password'))body.password=form.get('password');
+      await api('/users/'+user.id,{method:'PUT',body});toast('Gebruiker bijgewerkt.');
+    },`${user.name}: een gewijzigde rol of een nieuw wachtwoord meldt deze gebruiker op alle apparaten af. Bestaande deellinks blijven geldig totdat je ze intrekt.`);
+  }));
   $$('[data-delete-user]').forEach(b => on(b, 'click', async () => {
     const user = items.find(i => i.id === b.dataset.deleteUser);
     await formDialog('Gebruiker verwijderen', '', 'Gebruiker verwijderen', async () => {
@@ -469,7 +477,7 @@ on($('#split'), 'click', async () => {
   $('#split').setAttribute('aria-pressed', String(state.panes.length === 2)); renderPanes(); await refreshAll();recordLocation();
   if(!eventSource){eventSource=new EventSource('/api/events');eventSource.addEventListener('change',()=>{if(!$('#dialog').open&&!state.uploading)refreshAll(true);});}
 });
-on($('#search-form'), 'submit', async e => { e.preventDefault(); const q = $('#search').value.trim(); if (q && q.length < 2) return toast('Typ minimaal twee tekens.', true); active().query = q; active().selected.clear(); await loadPane(state.active); });
+on($('#search-form'), 'submit', async e => { e.preventDefault(); const q = $('#search').value.trim(); active().query = q; active().selected.clear(); await loadPane(state.active); });
 on($('#search'), 'search', async () => { if (!$('#search').value) { active().query = ''; await loadPane(state.active); } });
 $$('[data-batch]').forEach(button => on(button, 'click', async () => {
   const items = active().items.filter(i => active().selected.has(i.path));

@@ -88,6 +88,17 @@ export async function createApp(options = {}) {
     try { await fsp.lstat(absolute); } catch (e) { if (e.code === 'ENOENT') return; throw e; }
     throw fail(409, 'Er bestaat al een bestand of map met deze naam.');
   }
+  async function availablePath(input, directory=false) {
+    let target=await resolve(input,false);
+    const initial=target.relative, ext=directory?'':path.posix.extname(initial);
+    const stem=initial.slice(0,initial.length-ext.length);
+    for(let n=1;;n++) {
+      try { await absent(target.absolute);return target; }
+      catch(error) {if(error.status!==409)throw error;}
+      if(n>10000)throw fail(409,'Geen vrije bestandsnaam gevonden.');
+      target=await resolve(`${stem} (${n})${ext}`,false);
+    }
+  }
   async function walk(relative, limit = 25000) {
     const result = [];
     async function visit(rel) {
@@ -169,9 +180,10 @@ export async function createApp(options = {}) {
     if (typeof name !== 'string' || typeof password !== 'string' || password.length > 1024) throw fail(400, 'Ongeldige inloggegevens.');
     const user = db.prepare('SELECT * FROM users WHERE name=?').get(name);
     const digest = await scrypt(password, user?.salt || 'unknown-user', 64);
-    if (!user || !crypto.timingSafeEqual(digest, Buffer.from(user.digest, 'hex')) || db.prepare('SELECT digest FROM users WHERE id=?').get(user.id)?.digest !== user.digest) throw fail(401, 'Gebruikersnaam of wachtwoord klopt niet.');
+    const currentUser = user && db.prepare('SELECT * FROM users WHERE id=?').get(user.id);
+    if (!user || !crypto.timingSafeEqual(digest, Buffer.from(user.digest, 'hex')) || currentUser?.digest !== user.digest) throw fail(401, 'Gebruikersnaam of wachtwoord klopt niet.');
     attempts.delete(req.socket.remoteAddress);
-    res.json(session(res, user, req.body.remember !== false));
+    res.json(session(res, currentUser, req.body.remember !== false));
   });
   app.get('/s/:id', async (req, res) => {
     const share = db.prepare('SELECT * FROM shares WHERE id=? AND (expires=0 OR expires>?)').get(req.params.id, Date.now());
@@ -180,11 +192,11 @@ export async function createApp(options = {}) {
     if ((await fsp.stat(absolute)).isDirectory()) return zip(share.path, res);
     if (req.query.download === '0') {
       const ext = path.extname(absolute).toLowerCase();
-      if (['.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac','.pdf'].includes(ext)) return res.sendFile(absolute);
+      if (['.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac','.pdf'].includes(ext)) return res.sendFile(absolute, {dotfiles:'allow'});
       const st = await fsp.stat(absolute);
       if (st.size < 2 * 1024 ** 2) { const bytes = await fsp.readFile(absolute); if (!bytes.includes(0)) return res.type('text/plain').send(bytes); }
     }
-    res.download(absolute);
+    res.download(absolute, {dotfiles:'allow'});
   });
   app.use('/api', (req, _res, next) => {
     if (!req.auth) return next(fail(401, 'Log in om verder te gaan.'));
@@ -255,25 +267,25 @@ export async function createApp(options = {}) {
     res.json({path:relative,name:path.posix.basename(relative),directory:st.isDirectory(),size:st.size,modified:st.mtimeMs});
   });
   app.get('/api/search', async (req, res) => {
-    const q = String(req.query.q || '').toLocaleLowerCase();
-    if (q.length < 2) throw fail(400, 'Typ minimaal twee tekens.');
+    if (typeof req.query.q !== 'string' || !req.query.q.trim() || req.query.q.length > 256) throw fail(400, 'Gebruik een zoekterm van 1–256 tekens.');
+    const q = req.query.q.toLowerCase();
     const { relative } = await resolve(req.query.path || '');
-    const items = (await walk(relative)).slice(1).filter(i => path.posix.basename(i.path).toLocaleLowerCase().includes(q));
+    const items = (await walk(relative)).slice(1).filter(i => (i.directory ? i.path : path.posix.basename(i.path)).toLowerCase().includes(q));
     res.json({ items: items.slice(0, 1000).map(({ absolute, ...i }) => ({ ...i, name: path.posix.basename(i.path) })), truncated: items.length > 1000 });
   });
   app.get('/api/file', async (req, res) => {
     const { absolute } = await resolve(req.query.path);
     if (!(await fsp.stat(absolute)).isFile()) throw fail(400, 'Dit is geen bestand.');
-    if (req.query.download === '1') return res.download(absolute);
+    if (req.query.download === '1') return res.download(absolute, {dotfiles:'allow'});
     // Never render user-controlled HTML/SVG/scripts under the application origin.
     const ext = path.extname(absolute).toLowerCase();
-    if (!['.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac'].includes(ext)) return res.download(absolute);
-    res.sendFile(absolute);
+    if (!['.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac'].includes(ext)) return res.download(absolute, {dotfiles:'allow'});
+    res.sendFile(absolute, {dotfiles:'allow'});
   });
   app.get('/api/pdf', async (req, res) => {
     const { absolute } = await resolve(req.query.path);
     if (path.extname(absolute).toLowerCase() !== '.pdf') throw fail(415, 'Dit is geen PDF-bestand.');
-    res.type('application/pdf').set('Content-Disposition', 'attachment').sendFile(absolute);
+    res.type('application/pdf').set('Content-Disposition', 'attachment').sendFile(absolute, {dotfiles:'allow'});
   });
   async function zip(relative, res) {
     const items = await walk(relative);
@@ -353,13 +365,7 @@ export async function createApp(options = {}) {
       await pipeline(req, limit, fs.createWriteStream(temporary, { flags: 'wx' }));
       await resolve(relative, false);
       if (conflict === 'rename') {
-        const initial = relative, ext = path.posix.extname(initial), stem = initial.slice(0, initial.length - ext.length);
-        for (let n = 1; ; n++) {
-          try { await absent(absolute); break; }
-          catch (error) { if (error.status !== 409) throw error; }
-          if (n > 10000) throw fail(409, 'Geen vrije bestandsnaam gevonden.');
-          ({absolute, relative} = await resolve(`${stem} (${n})${ext}`, false));
-        }
+        ({absolute,relative}=await availablePath(relative));
       }
       await fsp.mkdir(path.dirname(absolute), { recursive: true });
       staged = path.join(path.dirname(absolute), '.app-tmp-' + crypto.randomUUID());
@@ -384,17 +390,19 @@ export async function createApp(options = {}) {
   });
   write.post('/api/transfer', writable, async (req, res) => {
     const source = await resolve(req.body.source);
-    const target = await resolve(req.body.target, false);
+    let target = await resolve(req.body.target, false);
     if (!source.relative || !target.relative) throw fail(400, 'De hoofdmap kan niet worden verplaatst.');
     if (target.absolute.toLowerCase().startsWith(source.absolute.toLowerCase() + path.sep)) throw fail(400, 'Een map kan niet naar zichzelf worden gekopieerd.');
     if (!['move', 'copy'].includes(req.body.operation)) throw fail(400, 'Onbekende bewerking.');
+    if (!['reject','rename'].includes(req.body.conflict || 'reject')) throw fail(400, 'Onbekende keuze bij naamconflict.');
+    if (req.body.conflict === 'rename') target=await availablePath(target.relative,(await fsp.stat(source.absolute)).isDirectory());
     await absent(target.absolute);
     await walk(source.relative); // Validate descendants before recursive filesystem operations.
     if (req.body.operation === 'copy') await fsp.cp(source.absolute, target.absolute, { recursive: true, force: false, errorOnExist: true, filter: async p => !(await fsp.lstat(p)).isSymbolicLink() });
     else await fsp.rename(source.absolute, target.absolute);
     // Existing shares must never silently point to an unrelated replacement file after a move.
     if (req.body.operation === 'move') revokePath(source.relative);
-    res.json({ ok: true });
+    res.json({ ok: true, path:target.relative });
   });
   function revokePath(relative) {
     for (const row of db.prepare('SELECT id,path FROM shares').all()) if (row.path === relative || row.path.startsWith(relative + '/')) db.prepare('DELETE FROM shares WHERE id=?').run(row.id);
@@ -454,6 +462,26 @@ export async function createApp(options = {}) {
   });
   app.get('/api/users', admin, (_req, res) => res.json({ items: db.prepare('SELECT id,name,role FROM users ORDER BY name').all() }));
   write.post('/api/users', admin, async (req, res) => { const u = await addUser(req.body.name, req.body.password, req.body.role); res.status(201).json(publicUser(u)); });
+  write.put('/api/users/:id', admin, throttle, async (req, res) => {
+    if (req.params.id === req.auth.id) throw fail(400, 'Wijzig je eigen wachtwoord via Mijn account. Je kunt je eigen rol niet wijzigen.');
+    const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
+    if (!user) throw fail(404, 'Gebruiker niet gevonden.');
+    const {role=user.role,password} = req.body || {};
+    if (!['admin','editor','viewer'].includes(role)) throw fail(400, 'Onbekende rol.');
+    if (password !== undefined && (typeof password !== 'string' || password.length < 12 || password.length > 1024)) throw fail(400, 'Gebruik een wachtwoord van 12–1024 tekens.');
+    if (password === undefined && role === user.role) return res.json(publicUser(user));
+    let salt=user.salt, digest=user.digest;
+    if (password !== undefined) { salt=token(); digest=(await scrypt(password,salt,64)).toString('hex'); }
+    // All mutations use the same queue: session revocation and this update cannot
+    // interleave with another password or role change inside this process.
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare('UPDATE users SET role=?,salt=?,digest=? WHERE id=?').run(role,salt,digest,user.id);
+      db.prepare('DELETE FROM sessions WHERE user_id=?').run(user.id);
+      db.exec('COMMIT');
+    } catch (error) {db.exec('ROLLBACK');throw error;}
+    res.json(publicUser({...user,role}));
+  });
   write.delete('/api/users/:id', admin, (req, res) => {
     if (req.params.id === req.auth.id) throw fail(400, 'Je kunt je eigen account niet verwijderen.');
     db.prepare('DELETE FROM sessions WHERE user_id=?').run(req.params.id);
