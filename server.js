@@ -20,6 +20,10 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 const day = 86400000;
 
 export async function createApp(options = {}) {
+  const watchEnabled = options.watch ?? process.env.WATCH ?? true;
+  if (![true, false, 'true', 'false'].includes(watchEnabled)) throw new Error('WATCH must be true or false.');
+  const pollingInterval = Number(options.pollingInterval ?? process.env.POLLING_INTERVAL_MS ?? 15000);
+  if (!Number.isSafeInteger(pollingInterval) || pollingInterval < 0 || pollingInterval > 2147483647) throw new Error('POLLING_INTERVAL_MS must be an integer between 0 and 2147483647.');
   const root = path.resolve(options.files || process.env.FILES_DIR || path.join(here, 'data/files'));
   const config = path.resolve(options.config || process.env.CONFIG_DIR || path.join(here, 'data/config'));
   if (config === root || config.startsWith(root + path.sep) || root.startsWith(config + path.sep)) throw new Error('FILES_DIR en CONFIG_DIR mogen niet in elkaar liggen.');
@@ -47,12 +51,22 @@ export async function createApp(options = {}) {
   const eventClients = new Set();
   const sizeCache = new Map();
   let watchTimer;
-  const watcher = fs.watch(realRoot, { recursive:true }, () => {
+  const emitChange = () => { for (const client of eventClients) client.write('event: change\ndata: {}\n\n'); };
+  const notifyChange = () => {
     sizeCache.clear();
     clearTimeout(watchTimer);
-    watchTimer = setTimeout(() => { for (const client of eventClients) client.write('event: change\ndata: {}\n\n'); }, 150);
-  });
-  watcher.on('error', error => console.error('Filesystem watcher:', error.message));
+    watchTimer = setTimeout(emitChange, 150);
+  };
+  let watcher;
+  if (watchEnabled === true || watchEnabled === 'true') {
+    try {
+      watcher = fs.watch(realRoot, { recursive:true }, notifyChange);
+      watcher.on('error', error => { console.error('Filesystem watcher:', error.message);watcher.close();notifyChange(); });
+    } catch(error) { console.error('Filesystem watcher unavailable:', error.message); }
+  }
+  // Periodic invalidation also covers network mounts that do not deliver fs.watch events.
+  const pollTimer = pollingInterval ? setInterval(() => {sizeCache.clear();emitChange();}, pollingInterval) : undefined;
+  pollTimer?.unref();
   app.disable('x-powered-by');
   const maxUpload = Number(options.maxUpload || process.env.MAX_UPLOAD_BYTES || 10 * 1024 ** 3);
   const readOnly = options.readOnly ?? process.env.READ_ONLY === 'true';
@@ -535,7 +549,7 @@ export async function createApp(options = {}) {
     if (status >= 500) console.error(error.code || error.name, error.message);
     res.status(status).json({ error: mapped?.[1] || (duplicate ? 'Deze gebruikersnaam bestaat al.' : status === 500 ? 'Er ging iets mis op de server.' : error.message) });
   });
-  const stopEvents = () => {watcher.close();clearTimeout(watchTimer);for(const client of eventClients)client.end();};
+  const stopEvents = () => {watcher?.close();clearTimeout(watchTimer);clearInterval(pollTimer);for(const client of eventClients)client.end();};
   return { app, stopEvents, close: () => {if(closed)return;closed=true;stopEvents();db.close();}, root, config, setupTokenRequired: !countUsers() };
 }
 

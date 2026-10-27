@@ -325,6 +325,42 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
   });
 });
 
+test('periodic refresh updates externally changed folder sizes without native watchers', async t => {
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'droppy-next-poll-'));
+  const instance=await createApp({files:path.join(temp,'files'),config:path.join(temp,'config'),watch:false,pollingInterval:50});
+  const server=instance.app.listen(0,'127.0.0.1');
+  await new Promise(resolve=>server.once('listening',resolve));
+  t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));instance.close();await fs.rm(temp,{recursive:true,force:true});});
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const setupToken=(await fs.readFile(path.join(instance.config,'setup-token'),'utf8')).trim();
+  const setup=await fetch(base+'/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'admin',password:'polling-test-password',setupToken})});
+  assert.equal(setup.status,201);
+  const headers={Cookie:setup.headers.get('set-cookie').split(';')[0]};
+  await fs.mkdir(path.join(instance.root,'folder'));
+  await fs.writeFile(path.join(instance.root,'folder','file.txt'),'abc');
+  const size=async()=>{const r=await fetch(base+'/api/files',{headers});assert.equal(r.status,200);return (await r.json()).items.find(i=>i.name==='folder').size;};
+  assert.equal(await size(),3);
+  const controller=new AbortController();
+  const events=await fetch(base+'/api/events',{headers,signal:controller.signal});
+  const reader=events.body.getReader();
+  try {
+    await fs.writeFile(path.join(instance.root,'folder','file.txt'),'abcdefghij');
+    let received='';
+    const deadline=setTimeout(()=>controller.abort(),3000);
+    try {while(!received.includes('event: change')){const chunk=await reader.read();assert.equal(chunk.done,false);received+=new TextDecoder().decode(chunk.value);}}
+    finally {clearTimeout(deadline);}
+    assert.equal(await size(),10);
+    await fs.unlink(path.join(instance.root,'folder','file.txt'));
+    await new Promise(resolve=>setTimeout(resolve,120));
+    assert.equal(await size(),0);
+  } finally {controller.abort();await reader.cancel().catch(()=>{});}
+});
+
+test('invalid watcher settings fail before creating storage', async()=>{
+  for(const options of [{watch:'yes'},{pollingInterval:-1},{pollingInterval:'bad'},{pollingInterval:0.5},{pollingInterval:2147483648}])
+    await assert.rejects(createApp(options),/WATCH|POLLING_INTERVAL_MS/);
+});
+
 test('persistent accounts and global read-only mode survive restart', async t => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(),'droppy-next-persistence-'));
   const options = {files:path.join(temp,'files'),config:path.join(temp,'config')};

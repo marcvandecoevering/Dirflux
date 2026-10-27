@@ -89,7 +89,11 @@ Environment variables are read from the process. To use `.env`, copy `.env.examp
 | `CONFIG_DIR` | `data/config` | SQLite, setup code, temporary uploads and trash; container `/config` |
 | `MAX_UPLOAD_BYTES` | `10737418240` | Maximum upload size, 10 GiB by default |
 | `READ_ONLY` | `false` | Deny file changes and new public links |
+| `WATCH` | `true` | Enable native recursive filesystem notifications |
+| `POLLING_INTERVAL_MS` | `15000` | Periodically invalidate folder sizes and refresh connected clients; `0` disables this fallback |
 | `COOKIE_SECURE` | `false` | Require HTTPS for session cookies when `true` |
+
+For network mounts, periodic refresh works even when native filesystem notifications are unavailable. It refreshes on every interval rather than scanning the entire tree for changes; directory sizes are recalculated on demand. `WATCH=false` disables native notifications independently of periodic refresh. Disabling both means externally changed folder sizes can remain cached until an app mutation or restart.
 
 For an HTTPS reverse proxy, enable `COOKIE_SECURE=true` and preserve the original Host header. Set proxy request-size and timeout limits for expected uploads. The application does not trust forwarded headers for authentication or rate limiting. Proxy subpath hosting is not yet supported/verified.
 
