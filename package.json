@@ -3,7 +3,23 @@
   "version": "0.1.0",
   "private": true,
   "license": "BSD-2-Clause",
-  "files": ["server.js", "lib/", "public/", "src/", "scripts/assets.js", "scripts/ensure-assets.js", "README.md", "SECURITY.md", "LICENSE", "LICENSE.droppy", "THIRD_PARTY_NOTICES.md", "docs/", "Dockerfile", "compose.yaml", ".env.example"],
+  "files": [
+    "server.js",
+    "lib/",
+    "public/",
+    "src/",
+    "scripts/assets.js",
+    "scripts/ensure-assets.js",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE",
+    "LICENSE.droppy",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/",
+    "Dockerfile",
+    "compose.yaml",
+    ".env.example"
+  ],
   "type": "module",
   "description": "Zelfstandige opvolger voor droppy, voor je eigen server",
   "engines": {
@@ -23,15 +39,16 @@
   },
   "dependencies": {
     "archiver": "8.0.0",
-    "express": "5.3.0"
+    "express": "5.3.0",
+    "picomatch": "4.0.7"
   },
   "devDependencies": {
-    "@fontsource/roboto": "5.3.0",
-    "esbuild": "0.28.2",
     "@codemirror/language-data": "6.5.2",
     "@codemirror/theme-one-dark": "6.1.3",
+    "@fontsource/roboto": "5.3.0",
     "@uiw/codemirror-themes-all": "4.25.12",
     "codemirror": "6.0.2",
+    "esbuild": "0.28.2",
     "pdfjs-dist": "6.4.299"
   }
 }

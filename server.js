@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { ZipArchive } from 'archiver';
 import { createMoveJournal } from './lib/moves.js';
 import { sendOpenedFile } from './lib/download.js';
+import picomatch from 'picomatch';
 
 const scrypt = promisify(crypto.scrypt);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -20,6 +21,17 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 const day = 86400000;
 
 export async function createApp(options = {}) {
+  let ignorePatterns = options.ignorePatterns;
+  if (ignorePatterns === undefined) {
+    try { ignorePatterns = JSON.parse(process.env.IGNORE_PATTERNS || '[]'); }
+    catch { throw new Error('IGNORE_PATTERNS must be a JSON array of glob patterns.'); }
+  }
+  if (!Array.isArray(ignorePatterns) || ignorePatterns.length > 100 || ignorePatterns.some(p => typeof p !== 'string' || !p || p.length > 1024)) throw new Error('IGNORE_PATTERNS must contain at most 100 non-empty patterns of at most 1024 characters.');
+  const ignoreMatchers = ignorePatterns.map(p => picomatch(p, {dot:true, windows:false, nocase:process.platform === 'win32', strictBrackets:true}));
+  function ignored(relative) {
+    const parts=relative.split('/').filter(Boolean);
+    return parts.some((_,i)=>ignoreMatchers.some(matches=>matches(parts.slice(0,i+1).join('/'))));
+  }
   const watchEnabled = options.watch ?? process.env.WATCH ?? true;
   if (![true, false, 'true', 'false'].includes(watchEnabled)) throw new Error('WATCH must be true or false.');
   const pollingInterval = Number(options.pollingInterval ?? process.env.POLLING_INTERVAL_MS ?? 15000);
@@ -94,6 +106,7 @@ export async function createApp(options = {}) {
   }
   async function resolve(input = '', mustExist = true) {
     const relative = normalize(input);
+    if (ignored(relative)) throw fail(403, 'Dit pad is uitgesloten door de serverinstellingen.');
     let current = realRoot;
     for (const piece of relative.split('/').filter(Boolean)) {
       current = path.join(current, piece);
@@ -119,9 +132,13 @@ export async function createApp(options = {}) {
       target=await resolve(`${stem} (${n})${ext}`,false);
     }
   }
-  async function walk(relative, limit = 25000) {
+  async function walk(relative, limit = 25000, rejectIgnored = false) {
     const result = [];
     async function visit(rel) {
+      if (ignored(rel)) {
+        if (rejectIgnored) throw fail(403, 'Deze map bevat uitgesloten bestanden en kan niet als geheel worden gewijzigd.');
+        return;
+      }
       if (result.length >= limit) throw fail(413, `Meer dan ${limit} items; kies een kleinere map.`);
       const { absolute } = await resolve(rel);
       const st = await fsp.lstat(absolute);
@@ -284,6 +301,7 @@ export async function createApp(options = {}) {
     const items = [];
     for (const entry of await fsp.readdir(absolute, { withFileTypes: true })) {
       if (entry.isSymbolicLink() || entry.name.startsWith('.app-tmp-')) continue;
+      if (ignored([relative,entry.name].filter(Boolean).join('/'))) continue;
       try {
         const st = await fsp.stat(path.join(absolute, entry.name));
         if (!st.isDirectory() && !st.isFile()) continue;
@@ -449,7 +467,8 @@ export async function createApp(options = {}) {
     if (!['reject','rename'].includes(req.body.conflict || 'reject')) throw fail(400, 'Onbekende keuze bij naamconflict.');
     if (req.body.conflict === 'rename') target=await availablePath(target.relative,(await fsp.stat(source.absolute)).isDirectory());
     await absent(target.absolute);
-    await walk(source.relative); // Validate descendants before recursive filesystem operations.
+    const descendants=await walk(source.relative,25000,true);
+    for (const item of descendants) if (ignored(target.relative+item.path.slice(source.relative.length))) throw fail(403, 'De doelmap zou uitgesloten bestanden bevatten.');
     if (req.body.operation === 'copy') await fsp.cp(source.absolute, target.absolute, { recursive: true, force: false, errorOnExist: true, filter: async p => !(await fsp.lstat(p)).isSymbolicLink() });
     else await moves.move(source,target);
     res.json({ ok: true, path:target.relative });
@@ -460,6 +479,7 @@ export async function createApp(options = {}) {
   write.post('/api/trash', writable, async (req, res) => {
     const { relative, absolute } = await resolve(req.body.path);
     if (!relative) throw fail(400, 'De hoofdmap kan niet worden verwijderd.');
+    if (ignoreMatchers.length) await walk(relative,25000,true);
     const id = crypto.randomUUID(), destination = path.join(trashDir, id);
     try { await fsp.rename(absolute, destination); }
     catch (e) {

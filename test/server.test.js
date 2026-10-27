@@ -361,6 +361,57 @@ test('invalid watcher settings fail before creating storage', async()=>{
     await assert.rejects(createApp(options),/WATCH|POLLING_INTERVAL_MS/);
 });
 
+test('ignore rules cover listings, archives, existing shares and recursive mutations', async t => {
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'droppy-next-ignore-'));
+  const options={files:path.join(temp,'files'),config:path.join(temp,'config'),watch:false,pollingInterval:0};
+  let instance=await createApp(options),server,base;
+  const start=async()=>{server=instance.app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));base=`http://127.0.0.1:${server.address().port}`;};
+  const stop=async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));instance.close();};
+  await start();
+  t.after(async()=>{await stop();await fs.rm(temp,{recursive:true,force:true});});
+  const setupToken=(await fs.readFile(path.join(instance.config,'setup-token'),'utf8')).trim();
+  const setup=await fetch(base+'/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'admin',password:'ignore-test-password',setupToken})});
+  assert.equal(setup.status,201);
+  const headers={Cookie:setup.headers.get('set-cookie').split(';')[0],'X-CSRF-Token':(await setup.json()).csrf,'Content-Type':'application/json'};
+  const request=(url,method='GET',body)=>fetch(base+url,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
+  await fs.mkdir(path.join(instance.root,'docs','private'),{recursive:true});
+  await fs.writeFile(path.join(instance.root,'docs','visible.txt'),'public');
+  await fs.writeFile(path.join(instance.root,'docs','hidden.tmp'),'secret');
+  await fs.writeFile(path.join(instance.root,'docs','private','key.txt'),'private');
+  await fs.writeFile(path.join(instance.root,'docs','.env'),'password');
+  const fileShare=await (await request('/api/shares','POST',{path:'docs/hidden.tmp'})).json();
+  const folderShare=await (await request('/api/shares','POST',{path:'docs'})).json();
+  await stop();
+  instance=await createApp({...options,ignorePatterns:['**/*.tmp','**/private','**/.env','destination/**']});
+  await start();
+  const listed=await (await request('/api/files?path=docs')).json();
+  assert.deepEqual(listed.items.map(i=>i.name),['visible.txt']);
+  assert.equal((await (await request('/api/files')).json()).items[0].size,6);
+  const search=await (await request('/api/search?q=hidden')).json();
+  assert.equal(search.items.length,0);
+  for(const endpoint of ['/api/files?path=docs/private','/api/stat?path=docs/hidden.tmp','/api/file?path=docs/hidden.tmp','/api/file?download=1&path=docs/hidden.tmp','/api/text?path=docs/.env'])
+    assert.equal((await request(endpoint)).status,403,endpoint);
+  if(process.platform==='win32') assert.equal((await request('/api/file?path=DOCS/HIDDEN.TMP')).status,403);
+  assert.equal((await fetch(base+'/api/upload?path=docs/new.tmp',{method:'PUT',headers:{Cookie:headers.Cookie,'X-CSRF-Token':headers['X-CSRF-Token']},body:'blocked'})).status,403);
+  assert.equal((await request('/api/create','POST',{path:'new.tmp'})).status,403);
+  assert.equal((await request('/api/shares','POST',{path:'docs/private/key.txt'})).status,403);
+  assert.equal((await fetch(base+'/s/'+fileShare.id)).status,403);
+  const archive=await fetch(base+'/s/'+folderShare.id);
+  assert.equal(archive.status,200);
+  const contents=archiveContents(Buffer.from(await archive.arrayBuffer()));
+  assert.ok([...contents.keys()].some(p=>p.endsWith('visible.txt')));
+  assert.ok(![...contents.keys()].some(p=>/hidden|private|\.env/.test(p)));
+  for(const operation of ['move','copy']) assert.equal((await request('/api/transfer','POST',{source:'docs',target:'other',operation})).status,403);
+  assert.equal((await request('/api/trash','POST',{path:'docs'})).status,403);
+  assert.equal(await fs.readFile(path.join(instance.root,'docs','hidden.tmp'),'utf8'),'secret');
+  assert.equal((await request('/api/transfer','POST',{source:'docs/visible.txt',target:'allowed.txt',operation:'copy'})).status,200);
+});
+
+test('invalid ignore configuration is rejected before opening storage', async()=>{
+  for(const ignorePatterns of ['*.tmp',[null],[''],['x'.repeat(1025)],Array(101).fill('x')])
+    await assert.rejects(createApp({ignorePatterns}),/IGNORE_PATTERNS/);
+});
+
 test('persistent accounts and global read-only mode survive restart', async t => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(),'droppy-next-persistence-'));
   const options = {files:path.join(temp,'files'),config:path.join(temp,'config')};

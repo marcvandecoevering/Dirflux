@@ -7,3 +7,5 @@ The file-icon sprite sheet in `public/original/sprites.png` is by Lars Jung (201
 Roboto font files are supplied by the pinned `@fontsource/roboto` package. Its license is copied into `public/vendor/licenses/` by the asset build. No remote font service is used.
 
 The editor uses CodeMirror 6 and its language packages; PDF rendering uses Mozilla PDF.js. The bundled packages' license texts are copied into `public/vendor/licenses/`. Generated JavaScript retains separate legal-comment files. The PDF standard-font and character-map directories also retain their shipped notices. See the lockfile for exact dependency versions.
+
+Server-side exclusion matching uses picomatch (MIT), installed as a production dependency with its upstream license. See `package-lock.json` for its pinned version.
