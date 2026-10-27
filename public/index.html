@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#181818">
+  <title>droppy</title>
+  <link rel="icon" href="/original/logo.svg" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/original/logo192.png">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/original/fonts.css">
+  <link rel="stylesheet" href="/original/sprites.css">
+  <link rel="stylesheet" href="/classic.css">
+  <script src="/app.js" defer></script>
+</head>
+<body class="classic">
+<svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8Zm0 0v6h5M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/></symbol>
+  <symbol id="i-media" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m10 8 6 4-6 4Z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M4 15v5h16v-5"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v13m-5-5 5 5 5-5M4 15v5h16v-5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></symbol>
+  <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="m9 15 6-6M8 10 5 13a4 4 0 0 0 6 6l3-3m-4-8 3-3a4 4 0 0 1 6 6l-3 3"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 5v5h-5M4 19v-5h5M20 10a8 8 0 0 0-14-5M4 14a8 8 0 0 0 14 5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6"/></symbol>
+  <symbol id="i-exit" viewBox="0 0 24 24"><path d="M10 3H4v18h6m4-15 6 6-6 6M9 12h11"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+</defs></svg>
+<section id="auth" class="auth" hidden>
+  <div class="auth-story"><a class="brand" href="/"><span class="brand-mark">d<span>↗</span></span>droppy<span class="next">NEXT</span></a><div><span class="eyebrow">JE EIGEN PLEK</span><h1>Je bestanden.<br>Gewoon thuis.</h1><p>Bewaar, bekijk en deel wat belangrijk is.<br>Op jouw server. Onder jouw beheer.</p><div class="story-files"><span>▧ Foto’s</span><span>≡ Documenten</span><span>▷ Media</span></div></div><small>Een nieuwe basis voor een vertrouwd idee.</small></div>
+  <div class="auth-form"><form id="login-form"><span class="eyebrow">DROPPY NEXT</span><h2 id="auth-title">Welkom terug</h2><p id="auth-description">Log in om je bestanden te openen.</p><label>Gebruikersnaam<input id="username" name="username" autocomplete="username" required maxlength="64" autofocus></label><label>Wachtwoord<input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024"></label><p id="auth-error" class="error" role="alert"></p><button class="primary" id="login-button" type="submit">Inloggen <span>→</span></button><small id="auth-footnote">Alleen toegankelijk met jouw account.</small></form></div>
+</section>
+<div id="shell" class="shell" hidden>
+  <aside class="sidebar"><a class="brand" href="/"><span class="brand-mark">d<span>↗</span></span>droppy<span class="next">NEXT</span></a><span class="nav-label">WERKRUIMTE</span><nav><button class="nav-item active" id="nav-files"><svg><use href="#i-folder"/></svg>Alle bestanden</button><button class="nav-item" id="nav-shares"><svg><use href="#i-link"/></svg>Gedeelde links</button><button class="nav-item" id="nav-trash"><svg><use href="#i-trash"/></svg>Prullenbak</button><button class="nav-item" id="nav-users" hidden><svg><use href="#i-user"/></svg>Gebruikers</button></nav><div class="sidebar-bottom"><div class="server-card"><span class="status-dot"></span><div><strong>Jouw opslag</strong><small>Verbonden met je server</small></div></div><div class="profile"><span id="avatar" class="avatar">E</span><div><strong id="account-name"></strong><small id="account-role"></small></div><button class="icon-button" id="logout" aria-label="Uitloggen" title="Uitloggen"><svg><use href="#i-exit"/></svg></button></div></div></aside>
+  <main class="workspace"><header class="topbar"><div class="topbar-label"><span class="status-dot"></span>PRIVÉWERKRUIMTE</div><div class="topbar-actions"><button id="account-settings" class="icon-button" aria-label="Mijn account" title="Mijn account"><svg><use href="#i-user"/></svg></button><span class="version">Droppy Next <span>0.1</span></span></div></header><section class="page-heading"><div><span class="eyebrow">ALLES OP ÉÉN PLEK</span><h1>Alle bestanden<span>.</span></h1><p>Een plek voor je documenten, foto’s en alles daartussen.</p></div><button id="upload-button" class="primary write"><svg><use href="#i-upload"/></svg>Bestanden uploaden</button></section>
+    <div class="workspace-tools"><form id="search-form" class="search"><svg><use href="#i-search"/></svg><input id="search" aria-label="Zoek bestanden" placeholder="Zoek in deze map en submappen…" type="search"><kbd>Enter</kbd></form><div class="tool-buttons"><button id="new-folder" class="secondary write"><svg><use href="#i-plus"/></svg>Nieuwe map</button><button id="new-file" class="secondary write">Nieuw bestand</button><button id="split" class="icon-button" title="Twee vensters" aria-label="Twee vensters" aria-pressed="false"><svg><use href="#i-split"/></svg></button><button id="refresh" class="icon-button" title="Vernieuwen" aria-label="Vernieuwen"><svg><use href="#i-refresh"/></svg></button></div></div>
+    <div id="selection-bar" class="selection-bar" hidden><span id="selection-count"></span><button data-batch="download">Downloaden</button><button class="write" data-batch="copy">Kopiëren</button><button class="write" data-batch="move">Verplaatsen</button><button class="write danger" data-batch="trash">Naar prullenbak</button><button data-batch="clear" class="selection-clear">Deselecteren</button></div>
+    <section id="panes" class="panes" aria-label="Bestandsvensters"></section>
+    <footer class="workspace-footer"><span id="connection">Wijzigingen worden automatisch bijgewerkt</span><button id="upload-folder" class="text-button write">Een hele map uploaden ↗</button></footer>
+  </main>
+</div>
+<input id="file-input" type="file" multiple hidden><input id="folder-input" type="file" webkitdirectory multiple hidden>
+<section id="uploads" class="upload-panel" aria-live="polite" hidden><div><strong id="upload-title">Uploaden</strong><button id="cancel-upload" class="text-button">Annuleren</button></div><progress id="upload-progress" max="100" value="0"></progress><small id="upload-detail"></small></section>
+<div id="toast" class="toast" role="status" hidden></div>
+<dialog id="dialog"><div class="dialog-heading"><h2 id="dialog-title"></h2><button id="dialog-close" class="icon-button" aria-label="Sluiten">×</button></div><div id="dialog-content"></div></dialog>
+</body></html>
