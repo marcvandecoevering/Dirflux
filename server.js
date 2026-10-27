@@ -12,6 +12,7 @@ import { ZipArchive } from 'archiver';
 import { createMoveJournal } from './lib/moves.js';
 import { sendOpenedFile } from './lib/download.js';
 import picomatch from 'picomatch';
+import {createServer} from 'node:http';
 
 const scrypt = promisify(crypto.scrypt);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,7 @@ export async function createApp(options = {}) {
   }
   const maxUpload = byteLimit(options.maxUpload ?? process.env.MAX_UPLOAD_BYTES ?? 10 * 1024 ** 3,'MAX_UPLOAD_BYTES',0);
   const maxText = byteLimit(options.maxText ?? process.env.MAX_TEXT_BYTES ?? 2 * 1024 ** 2,'MAX_TEXT_BYTES',1,64 * 1024 ** 2);
+  const uploadTimeout = byteLimit(options.uploadTimeout ?? process.env.UPLOAD_TIMEOUT_MS ?? 604800000,'UPLOAD_TIMEOUT_MS',1,2147483647);
   let ignorePatterns = options.ignorePatterns;
   if (ignorePatterns === undefined) {
     try { ignorePatterns = JSON.parse(process.env.IGNORE_PATTERNS || '[]'); }
@@ -283,9 +285,9 @@ export async function createApp(options = {}) {
     res.on('close',()=>{clearInterval(heartbeat);eventClients.delete(res);});
   });
   const admin = (req, _res, next) => next(req.auth.role !== 'admin' ? fail(403, 'Alleen voor beheerders.') : undefined);
-  // Serialize mutations, including streamed uploads, to prevent check/write races between clients.
+  // Serialize filesystem commits. Receiving an upload must not lock out other users.
   let mutationQueue = Promise.resolve();
-  const serialize = handler => async (req, res, next) => {
+  const mutate = async (req, res, handler) => {
     const previous = mutationQueue;
     let release;
     mutationQueue = new Promise(resolve => { release = resolve; });
@@ -294,9 +296,12 @@ export async function createApp(options = {}) {
       if (req.aborted || res.destroyed) return;
       if (moves.hasPending()) throw fail(503, 'Een onderbroken verplaatsing moet eerst worden hersteld. Herstart de server.');
       if (!db.prepare('SELECT id FROM sessions WHERE id=? AND expires>?').get(req.auth.session_id, Date.now())) throw fail(401, 'Je sessie is verlopen.');
-      await handler(req, res, next);
-    } catch (error) { next(error); }
+      await handler();
+    }
     finally { release(); }
+  };
+  const serialize = handler => async (req,res,next) => {
+    try {await mutate(req,res,()=>handler(req,res,next));} catch(error) {next(error);}
   };
   const write = Object.fromEntries(['post','put','delete'].map(method => [method, (route,...handlers) => app[method](route,...handlers.slice(0,-1),serialize(handlers.at(-1)))]));
   write.post('/api/logout', (req, res) => {
@@ -433,7 +438,14 @@ export async function createApp(options = {}) {
       res.json({ exists:false });
     }
   });
-  write.put('/api/upload', writable, async (req, res) => {
+  const uploadDeadline = (req,res,next) => {
+    const timer=setTimeout(()=>req.destroy(),uploadTimeout);
+    timer.unref();
+    const clear=()=>clearTimeout(timer);
+    req.once('end',clear);req.once('close',clear);res.once('close',clear);
+    next();
+  };
+  app.put('/api/upload', writable, uploadDeadline, async (req, res) => {
     if (maxUpload && Number(req.headers['content-length']) > maxUpload) throw fail(413, 'Bestand is groter dan de uploadlimiet.');
     let { absolute, relative } = await resolve(req.query.path, false);
     if (!relative) throw fail(400, 'Geef een bestandsnaam op.');
@@ -451,6 +463,7 @@ export async function createApp(options = {}) {
     const limit = new Transform({ transform(chunk, _encoding, cb) { bytes += chunk.length; cb(maxUpload && bytes > maxUpload ? fail(413, 'Bestand is groter dan de uploadlimiet.') : null, chunk); } });
     try {
       await pipeline(req, limit, fs.createWriteStream(temporary, { flags: 'wx' }));
+      await mutate(req,res,async()=>{
       await resolve(relative, false);
       if (conflict === 'rename') {
         ({absolute,relative}=await availablePath(relative));
@@ -471,6 +484,7 @@ export async function createApp(options = {}) {
       staged = undefined;
       sizeCache.clear();
       res.status(201).json({ ok: true, bytes, path:relative });
+      });
     } finally {
       if (staged) await fsp.rm(staged, { force: true });
       await fsp.rm(temporary, { force: true });
@@ -579,6 +593,7 @@ export async function createApp(options = {}) {
   app.use('/api', (_req, _res, next) => next(fail(404, 'Onbekend API-adres.')));
   app.use(express.static(path.join(here, 'public'), { etag: true, maxAge: 0 }));
   app.use((error, _req, res, _next) => {
+    if (res.destroyed) return;
     if (res.headersSent) return res.destroy();
     const known = { ENOENT: [404, 'Bestand of map niet gevonden.'], EEXIST: [409, 'Deze naam bestaat al.'], ENOTDIR: [400, 'Dit is geen map.'], EISDIR: [400, 'Dit is een map.'], EACCES: [403, 'Geen toegang tot dit bestand.'], EPERM: [403, 'Deze bewerking is niet toegestaan.'], ENOSPC: [507, 'Onvoldoende schijfruimte.'] };
     const mapped = known[error.code];
@@ -588,7 +603,8 @@ export async function createApp(options = {}) {
     res.status(status).json({ error: mapped?.[1] || (duplicate ? 'Deze gebruikersnaam bestaat al.' : status === 500 ? 'Er ging iets mis op de server.' : error.message) });
   });
   const stopEvents = () => {watcher?.close();clearTimeout(watchTimer);clearInterval(pollTimer);for(const client of eventClients)client.end();};
-  return { app, stopEvents, close: () => {if(closed)return;closed=true;stopEvents();db.close();}, root, config, setupTokenRequired: !countUsers() };
+  const listen=(...args)=>createServer({requestTimeout:Math.max(300000,uploadTimeout),headersTimeout:60000},app).listen(...args);
+  return { app, listen, stopEvents, close: () => {if(closed)return;closed=true;stopEvents();db.close();}, root, config, setupTokenRequired: !countUsers() };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -596,7 +612,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (instance.setupTokenRequired) console.log('Initial setup: enter the code from the setup-token file in CONFIG_DIR.');
   const host = process.env.HOST || '127.0.0.1';
   const port = Number(process.env.PORT ?? 8094);
-  const server = instance.app.listen(port, host, () => console.log(`Droppy Next: http://${host}:${server.address().port}`));
-  server.requestTimeout = 3600000;
+  const server = instance.listen(port, host, () => console.log(`Droppy Next: http://${host}:${server.address().port}`));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {instance.stopEvents();server.close(() => { instance.close(); process.exit(0); });});
 }

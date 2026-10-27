@@ -14,7 +14,7 @@ await fs.writeFile(path.join(instance.root,'Projecten','instellingen.json'), JSO
 await fs.writeFile(path.join(instance.root,'Documenten','Voorbeeld.pdf'),samplePdf());
 await fs.writeFile(path.join(instance.root,'Geluidstest.wav'),sampleWav());
 await fs.copyFile(path.resolve(import.meta.dirname,'../public/original/logo192.png'),path.join(instance.root,'Foto’s','Droppy.png'));
-const server = instance.app.listen(18094,'127.0.0.1');
+const server = instance.listen(18094,'127.0.0.1');
 await new Promise(resolve=>server.once('listening',resolve));
 const setupToken=(await fs.readFile(path.join(instance.config,'setup-token'),'utf8')).trim();
 const response = await fetch('http://127.0.0.1:18094/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'demo',password:'demo-uitsluitend-lokaal',setupToken})});

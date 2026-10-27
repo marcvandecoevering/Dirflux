@@ -11,7 +11,7 @@ for(const phase of ['prepared','renamed']) test(`interrupted move at ${phase} re
   const options={files:path.join(temp,'files'),config:path.join(temp,'config')};
   let instance,server,base,cookie,csrf;
   async function start(extra={}) {
-    instance=await createApp({...options,...extra});server=instance.app.listen(0,'127.0.0.1');
+    instance=await createApp({...options,...extra});server=instance.listen(0,'127.0.0.1');
     await new Promise(resolve=>server.once('listening',resolve));base=`http://127.0.0.1:${server.address().port}`;
   }
   async function stop() {if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));instance.close();server=null;}}

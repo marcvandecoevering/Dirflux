@@ -35,7 +35,7 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'droppy-next-test-'));
   const instance = await createApp({ files:path.join(temp,'files'), config:path.join(temp,'config'), maxUpload:1024 });
   const setupToken=(await fs.readFile(path.join(instance.config,'setup-token'),'utf8')).trim();
-  const server = instance.app.listen(0, '127.0.0.1');
+  const server = instance.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); instance.close(); await fs.rm(temp, { recursive:true, force:true }); });
@@ -328,7 +328,7 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
 test('periodic refresh updates externally changed folder sizes without native watchers', async t => {
   const temp=await fs.mkdtemp(path.join(os.tmpdir(),'droppy-next-poll-'));
   const instance=await createApp({files:path.join(temp,'files'),config:path.join(temp,'config'),watch:false,pollingInterval:50});
-  const server=instance.app.listen(0,'127.0.0.1');
+  const server=instance.listen(0,'127.0.0.1');
   await new Promise(resolve=>server.once('listening',resolve));
   t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));instance.close();await fs.rm(temp,{recursive:true,force:true});});
   const base=`http://127.0.0.1:${server.address().port}`;
@@ -365,7 +365,7 @@ test('ignore rules cover listings, archives, existing shares and recursive mutat
   const temp=await fs.mkdtemp(path.join(os.tmpdir(),'droppy-next-ignore-'));
   const options={files:path.join(temp,'files'),config:path.join(temp,'config'),watch:false,pollingInterval:0};
   let instance=await createApp(options),server,base;
-  const start=async()=>{server=instance.app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));base=`http://127.0.0.1:${server.address().port}`;};
+  const start=async()=>{server=instance.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));base=`http://127.0.0.1:${server.address().port}`;};
   const stop=async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));instance.close();};
   await start();
   t.after(async()=>{await stop();await fs.rm(temp,{recursive:true,force:true});});
@@ -415,14 +415,14 @@ test('invalid ignore configuration is rejected before opening storage', async()=
 test('persistent accounts and global read-only mode survive restart', async t => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(),'droppy-next-persistence-'));
   const options = {files:path.join(temp,'files'),config:path.join(temp,'config')};
-  let instance = await createApp(options), server = instance.app.listen(0,'127.0.0.1');
+  let instance = await createApp(options), server = instance.listen(0,'127.0.0.1');
   await new Promise(resolve=>server.once('listening',resolve));
   let base = `http://127.0.0.1:${server.address().port}`;
   const setupToken=(await fs.readFile(path.join(instance.config,'setup-token'),'utf8')).trim();
   const setup=await fetch(base+'/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'admin',password:'persistence-test-password',setupToken})});
   assert.equal(setup.status,201);
   server.closeAllConnections(); await new Promise(resolve=>server.close(resolve)); instance.close();
-  instance = await createApp({...options,readOnly:true}); server = instance.app.listen(0,'127.0.0.1');
+  instance = await createApp({...options,readOnly:true}); server = instance.listen(0,'127.0.0.1');
   await new Promise(resolve=>server.once('listening',resolve)); base = `http://127.0.0.1:${server.address().port}`;
   t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));instance.close();await fs.rm(temp,{recursive:true,force:true});});
   const response = await fetch(base+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'admin',password:'persistence-test-password'})});
