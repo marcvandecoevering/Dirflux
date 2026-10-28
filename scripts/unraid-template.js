@@ -11,8 +11,9 @@ function httpsUrl(value) {
 export function renderUnraid({name,slug,project,image,icon,branch='main'}) {
   if(typeof name!=='string'||!name.trim()||name.length>64||/[\x00-\x1f]/.test(name))throw new Error('Provide a display name.');
   if(typeof slug!=='string'||!/^[a-z][a-z0-9-]{1,47}$/.test(slug))throw new Error('Provide a lowercase application slug.');
+  if(slug==='appdata')throw new Error('The appdata slug would overlap the default Files and Appdata folders.');
   const projectUrl=httpsUrl(project);
-  if(projectUrl.hostname!=='github.com'||!/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/.test(projectUrl.pathname)||projectUrl.search||projectUrl.hash)throw new Error('Project must be the canonical GitHub repository URL.');
+  if(projectUrl.hostname!=='github.com'||projectUrl.port||!/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/.test(projectUrl.pathname)||projectUrl.search||projectUrl.hash)throw new Error('Project must be the canonical GitHub repository URL.');
   if(!/^[A-Za-z0-9_.-]+$/.test(branch)||branch==='.'||branch==='..')throw new Error('Provide a simple published branch name.');
   if(typeof image!=='string'||!/^ghcr\.io\/[a-z0-9_.-]+\/[a-z0-9_.-]+:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(image))throw new Error('Provide a tagged GHCR image.');
   httpsUrl(icon);

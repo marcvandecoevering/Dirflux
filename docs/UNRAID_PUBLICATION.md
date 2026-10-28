@@ -58,3 +58,12 @@ use HTTPS and enable secure cookies for remote access.
 
 The generated tags follow the [public XML field reference](https://ca.unraid.net/submit/help/xml-field-reference).
 No minimum/maximum Unraid version is asserted until that version has been tested.
+
+Local generator checks cover restricted runtime arguments, separated default host
+paths, XML escaping, canonical raw template URLs and the beta marker. The reserved
+slug `appdata` is rejected because it would place configuration inside the default
+Files path. GitHub project URLs with a non-default port are rejected instead of
+silently changing their origin in generated links. Both generated documents have
+also been parsed with a real XML parser using synthetic metadata. These checks
+do not contact or verify the example URLs and do not replace the Community Apps
+validator or a real Unraid installation.
