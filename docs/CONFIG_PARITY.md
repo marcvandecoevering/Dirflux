@@ -20,9 +20,13 @@ Reference: droppy 12.2.0, commit `70b61d1ac7c2ce8045e07f4716b6a01abadf6296`, REA
 | `dev` | `npm run dev` uses Node watch; browser assets have a separate build step. | No equivalent browser live reload/minification toggle. |
 | `ignorePatterns` | `IGNORE_PATTERNS` JSON array, picomatch; excluded entries are also denied on direct access and mutations. | Implemented and tested, with stricter access rules. |
 | `watch` | `WATCH`, enabled by default, independent of periodic refresh. | Implemented and tested. |
-| `headers` | Fixed application security headers and the supplied reverse-proxy configuration. | Arbitrary application response-header configuration is not implemented. |
+| `headers` | `RESPONSE_HEADERS` accepts additional deployment headers as strings/string arrays. HTTP syntax, case-insensitive uniqueness and size limits are validated before storage opens. | Implemented with intentional restrictions: application-owned security/authentication/CORS/transport/content/cache/redirect fields cannot be overridden. |
 
 Additional settings include separate files/config directories, text-edit limits, secure-cookie enforcement and a live guest-session cap. See the README for their supported values. A proxy may provide deployment capabilities, but its availability alone does not establish equivalent application behavior.
+
+## Additional response-header checks
+
+`test/response-headers.test.js` checks metadata headers on pages, health, API errors and a real authenticated file download, including exact download contents and retained no-store/nosniff/framing headers. Invalid HTTP characters, newline injection, duplicate case variants, non-string/empty arrays, size/count limits and protected field overrides are rejected. Invalid configuration is verified to fail before creating the storage directory. The focused Windows run with framing, download and server integration tests passed 29/29. This does not claim support for arbitrary header overrides from the original configuration; reserved fields deliberately retain application ownership.
 
 ## Listener checks
 
