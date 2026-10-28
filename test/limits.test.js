@@ -128,3 +128,20 @@ test('invalid byte limits fail before storage is opened',async()=>{
   for(const value of [0,-1,'',true,64*1024**2+1])
     await assert.rejects(createApp({maxText:value}),/MAX_TEXT_BYTES/);
 });
+
+test('UTF-8 BOM and CRLF survive text reads and saves, while invalid encodings remain untouched',async t=>{
+  const {instance,request}=await fixture(t,{maxText:100});
+  const filename=path.join(instance.root,'format.txt');
+  const original=Buffer.from('\uFEFFéén\r\ntwee\r\n');
+  await fs.writeFile(filename,original);
+  const opened=await (await request('/api/text?path=format.txt')).json();
+  assert.deepEqual(Buffer.from(opened.text),original);
+  const saved=await request('/api/text','POST',{path:'format.txt',version:opened.version,text:opened.text});
+  assert.equal(saved.status,200);assert.equal((await saved.json()).version,opened.version);
+  assert.deepEqual(await fs.readFile(filename),original);
+  for(const bytes of [Buffer.from([0xff,0xfe,0x61,0]),Buffer.from([0x63,0x61,0x66,0xe9])]){
+    await fs.writeFile(filename,bytes);
+    assert.equal((await request('/api/text?path=format.txt')).status,415);
+    assert.deepEqual(await fs.readFile(filename),bytes);
+  }
+});

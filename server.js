@@ -516,7 +516,7 @@ export async function createApp(options = {}) {
     const { absolute } = await resolve(req.query.path);
     const bytes = await readLimitedFile(absolute,maxText);
     if (bytes.includes(0)) throw fail(415, 'Dit is een binair bestand. Download het om te openen.');
-    let text; try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { throw fail(415, 'Alleen UTF-8-tekst kan worden bewerkt.'); }
+    let text; try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); } catch { throw fail(415, 'Alleen UTF-8-tekst kan worden bewerkt.'); }
     res.json({ text, version: hash(bytes) });
   });
   write.post('/api/text', writable, async (req, res) => {

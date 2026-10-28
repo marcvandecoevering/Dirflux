@@ -1,4 +1,5 @@
 import { basicSetup } from 'codemirror';
+import {dominantLineEnding,editorText} from '../public/text-format.js';
 import {createPdfRenderer} from '../public/pdf-renderer.js';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
@@ -13,6 +14,7 @@ import * as pdfjs from 'pdfjs-dist';
 export const modes = languages.map(l=>l.name);
 export const themeNames = ['droppy','light','dark',...Object.keys(themes).filter(name=>Array.isArray(themes[name])&&!name.endsWith('Style'))];
 export async function editor(parent, text, filename, prefs, readOnly, onChange, onSave) {
+  const lineEnding=dominantLineEnding(text);
   const language = new Compartment(), wrapping = new Compartment(), appearance = new Compartment(), indentation = new Compartment();
   const description = languages.find(l=>l.extensions.includes(filename.split('.').at(-1).toLowerCase()));
   const appearanceExtensions = settings => [
@@ -28,7 +30,7 @@ export async function editor(parent, text, filename, prefs, readOnly, onChange, 
     appearance.of(appearanceExtensions(prefs)),
     EditorView.updateListener.of(update=>{if(update.docChanged)onChange();})
   ]})});
-  return { getText:()=>view.state.doc.toString(), destroy:()=>view.destroy(), focus:()=>view.focus(), find:()=>openSearchPanel(view),
+  return { getText:()=>editorText(view.state.doc,lineEnding), destroy:()=>view.destroy(), focus:()=>view.focus(), find:()=>openSearchPanel(view),
     setPreferences:settings=>view.dispatch({effects:[appearance.reconfigure(appearanceExtensions(settings)),indentation.reconfigure(indentationExtensions(settings)),wrapping.reconfigure(settings.lineWrapping?EditorView.lineWrapping:[])]}),
     wrap:value=>view.dispatch({effects:wrapping.reconfigure(value?EditorView.lineWrapping:[])}),
     mode:async name=>{const l=languages.find(i=>i.name===name);view.dispatch({effects:language.reconfigure(l?await l.load():[])});},
