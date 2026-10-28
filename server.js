@@ -148,22 +148,26 @@ export async function createApp(options = {}) {
       target=await resolve(`${stem} (${n})${ext}`,false);
     }
   }
-  async function walk(relative, limit = 25000, rejectIgnored = false) {
-    const result = [];
-    async function visit(rel) {
+  async function* walkEntries(rel,rejectIgnored=false,check=()=>{}) {
+      check();
       if (ignored(rel)) {
         if (rejectIgnored) throw fail(403, 'Deze map bevat uitgesloten bestanden en kan niet als geheel worden gewijzigd.');
         return;
       }
-      if (result.length >= limit) throw fail(413, `Meer dan ${limit} items; kies een kleinere map.`);
       const { absolute } = await resolve(rel);
       const st = await fsp.lstat(absolute);
-      result.push({ path: rel, absolute, directory: st.isDirectory(), size: st.size, modified: st.mtimeMs });
-      if (st.isDirectory()) for (const item of await fsp.readdir(absolute, { withFileTypes: true })) {
-        if (!item.isSymbolicLink() && !item.name.startsWith('.app-tmp-')) await visit([rel, item.name].filter(Boolean).join('/'));
+      if(!st.isFile()&&!st.isDirectory())return;
+      yield { path: rel, absolute, directory: st.isDirectory(), size: st.size, modified: st.mtimeMs };
+      if (st.isDirectory()) for (const item of (await fsp.readdir(absolute, { withFileTypes: true })).sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0)) {
+        if (!item.isSymbolicLink() && !item.name.startsWith('.app-tmp-')) yield* walkEntries([rel, item.name].filter(Boolean).join('/'),rejectIgnored,check);
       }
+  }
+  async function walk(relative, limit = 25000, rejectIgnored = false) {
+    const result = [];
+    for await(const item of walkEntries(relative,rejectIgnored)) {
+      if(result.length>=limit)throw fail(413,`Meer dan ${limit} items; kies een kleinere map.`);
+      result.push(item);
     }
-    await visit(relative);
     return result;
   }
   async function addUser(name, password, role) {
@@ -363,8 +367,21 @@ export async function createApp(options = {}) {
     if (typeof req.query.q !== 'string' || !req.query.q.trim() || req.query.q.length > 256) throw fail(400, 'Gebruik een zoekterm van 1–256 tekens.');
     const q = req.query.q.toLowerCase();
     const { relative } = await resolve(req.query.path || '');
-    const items = (await walk(relative)).slice(1).filter(i => (i.directory ? i.path : path.posix.basename(i.path)).toLowerCase().includes(q));
-    res.json({ items: items.slice(0, 1000).map(({ absolute, ...i }) => ({ ...i, name: path.posix.basename(i.path) })), truncated: items.length > 1000 });
+    const offset=Number(req.query.offset??0);
+    if(!Number.isSafeInteger(offset)||offset<0)throw fail(400,'Ongeldige zoekpagina.');
+    const items=[];let matched=0;
+    const deadline=Date.now()+30000;
+    for await(const item of walkEntries(relative,false,()=>{
+      if(res.destroyed)throw fail(499,'Zoekopdracht geannuleerd.');
+      if(Date.now()>deadline)throw fail(503,'Zoeken duurt te lang; kies een kleinere map.');
+    })) {
+      if(item.path===relative||!(item.directory?item.path:path.posix.basename(item.path)).toLowerCase().includes(q))continue;
+      if(matched++<offset)continue;
+      const {absolute,...entry}=item;items.push({...entry,name:path.posix.basename(item.path)});
+      if(items.length>1000)break;
+    }
+    const truncated=items.length>1000;
+    res.json({items:items.slice(0,1000),truncated,nextOffset:truncated?offset+1000:null});
   });
   app.get('/api/file', async (req, res) => {
     const { absolute } = await resolve(req.query.path);

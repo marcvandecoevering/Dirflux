@@ -102,14 +102,17 @@ function updateSelection() {
 }
 async function loadPane(index, quiet = false) {
   const pane = state.panes[index]; if (!pane) return;
+  if(quiet&&pane.query&&(pane.searchOffset>0||pane.loadingMore))return;
+  const generation=pane.loadGeneration=(pane.loadGeneration||0)+1;
   const requestedPath = pane.path, requestedSearch = pane.query || '';
   const data = await api(requestedSearch ? `/search?path=${encodeURIComponent(requestedPath)}&q=${encodeURIComponent(requestedSearch)}` : `/files?path=${encodeURIComponent(requestedPath)}`);
-  if (!state.panes[index] || pane.path !== requestedPath || (pane.query || '') !== requestedSearch) return;
-  const changed = JSON.stringify(pane.items) !== JSON.stringify(data.items);
+  if (state.panes[index]!==pane || pane.loadGeneration!==generation || pane.path !== requestedPath || (pane.query || '') !== requestedSearch) return;
+  const changed = JSON.stringify(pane.items) !== JSON.stringify(data.items) || pane.nextOffset !== (data.nextOffset??null);
   pane.items = data.items;
+  pane.nextOffset=data.nextOffset??null;pane.searchOffset=0;
   pane.selected = new Set([...pane.selected].filter(p => pane.items.some(i => i.path === p)));
   if (!quiet || changed) renderPane(index);
-  if (data.truncated && !quiet) toast('De eerste 1.000 zoekresultaten worden getoond.');
+  if (data.truncated && !quiet) toast('Er zijn meer resultaten. Gebruik Meer resultaten onderaan de lijst.');
 }
 async function refreshAll(quiet = false) {
   if (!state.user || refreshBusy) return;
@@ -161,6 +164,21 @@ function renderPane(index) {
   const items = [...pane.items].sort((a, b) => Number(b.directory) - Number(a.directory) || (pane.sort === 'name' ? a.name.localeCompare(b.name, 'nl', { numeric: true }) : a[pane.sort] - b[pane.sort]) * (pane.descending ? -1 : 1));
   const sortTitle = (key, label) => `<button data-sort="${key}">${label}${pane.sort === key ? pane.descending ? ' ↓' : ' ↑' : ''}</button>`;
   el.innerHTML = `${paneNav()}<div class="pane-toolbar"><button class="icon-button" data-up aria-label="Bovenliggende map" ${!pane.path ? 'disabled' : ''}>${icons('arrow')}</button><div class="breadcrumbs">${crumbs}</div>${state.panes.length === 2 ? `<span class="pane-label">${index === 0 ? 'LINKS' : 'RECHTS'}</span>` : ''}</div><div class="table-wrap"><table><thead><tr><th><input type="checkbox" data-all aria-label="Alles selecteren" ${items.length && pane.selected.size === items.length ? 'checked' : ''}></th><th>${sortTitle('name', pane.query ? 'Search results' : 'Name')}</th><th>${sortTitle('modified', 'Modified')}</th><th>${sortTitle('size', 'Size')}</th><th></th></tr></thead><tbody>${items.map(item => `<tr data-item="${escape(item.path)}" class="${pane.selected.has(item.path) ? 'selected' : ''}"><td><input type="checkbox" data-select aria-label="Selecteer ${escape(item.name)}" ${pane.selected.has(item.path) ? 'checked' : ''}></td><td><button class="file-name" data-open title="${escape(item.name)}"><span class="file-icon ${kind(item)}">${icons(kind(item))}</span><span>${escape(item.name)}${pane.query ? `<span class="file-path">${escape(parent(item.path) || 'Bestanden')}</span>` : ''}</span></button></td><td class="file-meta" title="${escape(new Date(item.modified).toLocaleString())}">${date(item.modified)}</td><td class="file-meta">${item.size===null ? '—' : size(item.size)}</td><td><div class="row-actions">${canWrite()?`<button class="icon-button write" data-share aria-label="Share ${escape(item.name)}" title="Share">${originalIcon('link')}</button>`:''}<button class="icon-button" data-download aria-label="Download ${escape(item.name)}" title="Download">${originalIcon('download')}</button>${canWrite()?`<button class="icon-button write" data-trash aria-label="Delete ${escape(item.name)}" title="Delete">${originalIcon('trash')}</button>`:''}<button class="icon-button" data-menu aria-label="Acties voor ${escape(item.name)}" title="Actions">${originalIcon('menu')}</button></div></td></tr>`).join('')}</tbody></table>${items.length ? '' : `<div class="empty">${originalIcon(pane.query ? 'find' : 'upload-cloud')}<strong>${pane.query ? 'No results' : 'Add files'}</strong><p>${pane.query ? 'Probeer een andere zoekterm.' : 'Deze map is nog leeg.<br>Sleep bestanden hierheen of begin met een nieuwe map.'}</p>${canWrite() && !pane.query ? '<button class="secondary" data-empty-upload>Bestanden uploaden</button>' : ''}</div>`}</div><div class="pane-footer"><span>${items.length} ${items.length === 1 ? 'item' : 'items'}${pane.query ? ` · “${escape(pane.query)}” <button data-clear-search class="text-button">Wis zoekopdracht</button>` : ''}</span><span>${size(items.filter(i => !i.directory).reduce((n, i) => n + i.size, 0))}</span></div>`;
+  if(pane.query&&pane.nextOffset!=null) {
+    const more=document.createElement('button');more.className='secondary search-more';more.textContent='Meer resultaten';el.querySelector('.table-wrap').append(more);
+    on(more,'click',async()=>{
+      const requestedPath=pane.path,requestedQuery=pane.query,offset=pane.nextOffset;
+      const generation=pane.loadGeneration=(pane.loadGeneration||0)+1;pane.loadingMore=true;
+      more.disabled=true;
+      try {
+        const data=await api(`/search?path=${encodeURIComponent(requestedPath)}&q=${encodeURIComponent(requestedQuery)}&offset=${offset}`);
+        if(state.panes[index]!==pane||pane.loadGeneration!==generation||pane.path!==requestedPath||pane.query!==requestedQuery||pane.nextOffset!==offset)return;
+        const scroll=el.querySelector('.table-wrap').scrollTop;
+        pane.items=[...new Map([...pane.items,...data.items].map(item=>[item.path,item])).values()];
+        pane.searchOffset=offset;pane.nextOffset=data.nextOffset;renderPane(index);el.querySelector('.table-wrap').scrollTop=scroll;
+      } finally {pane.loadingMore=false;more.disabled=false;}
+    });
+  }
   if (clipboard && canWrite()) { const paste=document.createElement('button');paste.className='paste-floating';paste.textContent='Paste here';el.append(paste);on(paste,'click',()=>pasteFiles(pane.path)); }
   el.querySelectorAll('[data-tool]').forEach(button=>on(button,'click',async e=>{
     e.preventDefault();setActive(index);
