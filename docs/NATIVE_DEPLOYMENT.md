@@ -35,7 +35,37 @@ node --env-file=/absolute/path/server.env server.js
 
 On Windows, use a Windows absolute path for the environment file. For example, `node --env-file=C:/FileManager/server.env server.js`. Keep credentials and the setup code out of shell command arguments and logs. Read `CONFIG_DIR/setup-token` locally when creating the initial administrator.
 
-A process manager must use the selected release's directory as its working directory and preserve the external environment-file path. Configure automatic restart after failures, but stop the service deliberately during updates. OS-specific service installers are not yet supplied or verified.
+A process manager must use the selected release's directory as its working directory and preserve the external environment-file path. Configure automatic restart after failures, but stop the service deliberately during updates. A Linux systemd unit is supplied below; Windows/macOS service installers are not yet supplied or verified.
+
+## Linux systemd service
+
+The release contains `deploy/file-manager.service` and `deploy/server.env.example`. These use generic deployment names while the app's final identity is being selected. The unit runs under a dedicated `file-manager` account, reads application code from `/opt/file-manager/current`, and permits writes to `/srv/file-manager/files` and `/var/lib/file-manager`. The latter holds configuration, temporary uploads and trash. `current` must point to the chosen release's `package` directory, with production dependencies installed as described above. The service account must be able to traverse/read that directory; application code and its parent directories should be administrator-owned and not writable by the service.
+
+For a **first installation**, create the account and new empty directories. If the account, configuration or storage already exists, inspect it and retain it instead of repeating initialization or changing existing file ownership recursively:
+
+```sh
+sudo useradd --system --user-group --no-create-home --shell /usr/sbin/nologin file-manager
+sudo install -d -o file-manager -g file-manager -m 0700 /srv/file-manager/files
+sudo install -d -o root -g file-manager -m 0750 /etc/file-manager
+sudo install -o root -g file-manager -m 0640 deploy/server.env.example /etc/file-manager/server.env
+sudo install -o root -g root -m 0644 deploy/file-manager.service /etc/systemd/system/file-manager.service
+```
+
+Edit `/etc/file-manager/server.env` before starting. Check `command -v node` and `/usr/bin/node --version`: `ExecStart` must point to your actual Node 24 executable. Use a system-wide runtime, not one under a home directory or `/tmp`/`/var/tmp`, which this unit hides. If you change storage locations, change `ReadWritePaths` and `RequiresMountsFor` in the unit too. Existing files must be accessible to the service account; the unit does not grant it access merely by naming a directory. Home-directory storage is hidden by `ProtectHome` and requires an explicitly reviewed adjustment.
+
+The default binds to loopback HTTP. Use the supplied nginx reverse-proxy example for remote HTTPS and set `COOKIE_SECURE=true` there. For native TLS, certificate/key paths must be readable by the service account and outside the shared file tree. Validate the adjusted unit, then start it and enable startup at boot:
+
+```sh
+sudo systemd-analyze verify /etc/systemd/system/file-manager.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now file-manager.service
+curl --fail http://127.0.0.1:8094/api/health
+sudo systemctl status file-manager.service
+```
+
+Read `/var/lib/file-manager/setup-token` locally as administrator for initial setup. Use `sudo journalctl -u file-manager.service` for diagnostics. A failed health check needs investigation even if systemd reports the process as active. For an update, stop the service, follow the backup procedure below, switch `current` to the new release, and start the service. A deliberate stop does not trigger automatic restart.
+
+The unit uses [systemd execution restrictions](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html) and [failure restart behavior](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html). It restricts writes, hides home/temporary/device locations, drops capabilities and prevents privilege escalation. These settings supplement filesystem permissions; they do not isolate the app from a hostile administrator or guarantee security.
 
 ## Update procedure
 
@@ -61,4 +91,6 @@ Restoring a snapshot also restores its sessions, passwords, links and trash stat
 
 `npm run test:package` packs and installs the actual release archive with production dependencies only. It starts the application, checks bundled editor/PDF assets, creates an account, uploads a file and creates a public link. It then stops the app, backs up both data trees, installs the archive into a second release directory and verifies persistent access. After changing the file, it restores the snapshot into fresh storage and verifies the original account, link and contents without overwriting the candidate's data.
 
-This test currently passes on Windows. The two release directories use the **same current build**. It verifies installation switching and backup restoration, not cross-version database migration or downgrade. Linux/macOS runs are configured in GitHub CI but have not run there yet. Published-release upgrade pairs, OS service integration, permissions under real service accounts and recovery on network storage remain release gates.
+This test currently passes on Windows. The two release directories use the **same current build**. It verifies installation switching and backup restoration, not cross-version database migration or downgrade. Linux/macOS runs are configured in GitHub CI but have not run there yet.
+
+`scripts/systemd-smoke.js` has passed in Ubuntu under WSL with systemd 259 and Node 24.22.1. It installs the actual production archive into an administrator-owned temporary application directory, creates a disposable service account and runtime-only unit, and verifies a non-root UID, zero effective capabilities, no-new-privileges, rejection of writes to application code, private configuration permissions, upload ownership, automatic restart after SIGKILL, persistent account/file access and graceful shutdown. It removes its unit, account and test storage afterward. The Linux CI job is configured to run it, but no GitHub execution has occurred. Boot-time activation, other Linux distributions, Windows/macOS service integration, published-release upgrade pairs and network-storage recovery remain release gates.

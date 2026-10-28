@@ -30,6 +30,9 @@ jobs:
       - run: npm run build
       - run: npm audit --audit-level=high
       - run: npm run test:package
+      - name: Verify native systemd service
+        if: runner.os == 'Linux'
+        run: sudo "$(command -v node)" scripts/systemd-smoke.js
       - name: Verify HTTPS reverse proxy
         if: runner.os == 'Linux'
         run: node scripts/proxy-smoke.js

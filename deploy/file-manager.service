@@ -1,0 +1,37 @@
+[Unit]
+Description=Self-hosted file manager
+After=network.target
+RequiresMountsFor=/srv/file-manager/files /var/lib/file-manager
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=file-manager
+Group=file-manager
+WorkingDirectory=/opt/file-manager/current
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node --env-file=/etc/file-manager/server.env server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+StateDirectory=file-manager
+StateDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/file-manager/files /var/lib/file-manager
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
