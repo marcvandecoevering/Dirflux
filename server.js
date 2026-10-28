@@ -96,7 +96,7 @@ export async function createApp(options = {}) {
   if (!Number.isSafeInteger(pollingInterval) || pollingInterval < 0 || pollingInterval > 2147483647) throw new Error('POLLING_INTERVAL_MS must be an integer between 0 and 2147483647.');
   const root = path.resolve(options.files || process.env.FILES_DIR || path.join(here, 'data/files'));
   const config = path.resolve(options.config || process.env.CONFIG_DIR || path.join(here, 'data/config'));
-  if (config === root || config.startsWith(root + path.sep) || root.startsWith(config + path.sep)) throw new Error('FILES_DIR en CONFIG_DIR mogen niet in elkaar liggen.');
+  if (config === root || config.startsWith(root + path.sep) || root.startsWith(config + path.sep)) throw new Error('FILES_DIR and CONFIG_DIR must not be nested inside each other.');
   await fsp.mkdir(root, { recursive: true });
   await fsp.mkdir(config, { recursive: true, mode: 0o700 });
   const realRoot = await fsp.realpath(root);
@@ -106,7 +106,7 @@ export async function createApp(options = {}) {
     const realKey=comparable(await fsp.realpath(privateKey));
     if(realKey===comparable(realRoot)||realKey.startsWith(comparable(realRoot)+path.sep))throw new Error('TLS_KEY_FILE must not be inside FILES_DIR.');
   }
-  if (comparable(realRoot) === comparable(realConfig) || comparable(realConfig).startsWith(comparable(realRoot) + path.sep) || comparable(realRoot).startsWith(comparable(realConfig) + path.sep)) throw new Error('Bestanden en configuratie moeten gescheiden blijven, ook na het volgen van links.');
+  if (comparable(realRoot) === comparable(realConfig) || comparable(realConfig).startsWith(comparable(realRoot) + path.sep) || comparable(realRoot).startsWith(comparable(realConfig) + path.sep)) throw new Error('Files and configuration must remain separate, including after resolving links.');
   const tmp = path.join(config, 'tmp');
   const trashDir = path.join(config, 'trash');
   await fsp.mkdir(tmp, { recursive: true });
@@ -179,35 +179,35 @@ export async function createApp(options = {}) {
   if (!countUsers()) {
     try { await fsp.writeFile(setupTokenPath,token()+'\n',{flag:'wx',mode:0o600}); }
     catch (error) { if (error.code !== 'EEXIST') throw error; }
-    if ((await fsp.lstat(setupTokenPath)).isSymbolicLink()) throw new Error('Setup-token mag geen symbolische link zijn.');
+    if ((await fsp.lstat(setupTokenPath)).isSymbolicLink()) throw new Error('The setup token must not be a symbolic link.');
     setupToken = (await fsp.readFile(setupTokenPath,'utf8')).trim();
-    if (setupToken.length < 32 || setupToken.length > 128) throw new Error('Ongeldig setup-tokenbestand.');
+    if (setupToken.length < 32 || setupToken.length > 128) throw new Error('Invalid setup token file.');
   }
 
   // Refuse traversal, NTFS streams/device names and symbolic links on every path component.
   function normalize(input = '') {
-    if (typeof input !== 'string' || input.length > 4096 || input.includes('\\') || /[\x00-\x1f:]/.test(input)) throw fail(400, 'Ongeldig pad.');
+    if (typeof input !== 'string' || input.length > 4096 || input.includes('\\') || /[\x00-\x1f:]/.test(input)) throw fail(400, 'Invalid path.');
     const parts = input.split('/').filter(Boolean);
-    if (parts.some(p => p.startsWith('.app-tmp-'))) throw fail(403, 'Deze naam is gereserveerd voor tijdelijke bestanden.');
-    if (parts.some(p => p === '.' || p === '..' || /[. ]$/.test(p) || /[<>"|?*]/.test(p) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/i.test(p))) throw fail(400, 'Ongeldige bestandsnaam.');
+    if (parts.some(p => p.startsWith('.app-tmp-'))) throw fail(403, 'This name is reserved for temporary files.');
+    if (parts.some(p => p === '.' || p === '..' || /[. ]$/.test(p) || /[<>"|?*]/.test(p) || /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/i.test(p))) throw fail(400, 'Invalid filename.');
     return parts.join('/');
   }
   async function resolve(input = '', mustExist = true) {
     const relative = normalize(input);
-    if (ignored(relative)) throw fail(403, 'Dit pad is uitgesloten door de serverinstellingen.');
+    if (ignored(relative)) throw fail(403, 'This path is excluded by the server settings.');
     let current = realRoot;
     for (const piece of relative.split('/').filter(Boolean)) {
       current = path.join(current, piece);
       try {
         const st = await fsp.lstat(current);
-        if (st.isSymbolicLink()) throw fail(403, 'Symbolische links worden niet gevolgd.');
+        if (st.isSymbolicLink()) throw fail(403, 'Symbolic links are not followed.');
       } catch (e) { if (e.code !== 'ENOENT' || mustExist) throw e; }
     }
     return { relative, absolute: current };
   }
   async function absent(absolute) {
     try { await fsp.lstat(absolute); } catch (e) { if (e.code === 'ENOENT') return; throw e; }
-    throw fail(409, 'Er bestaat al een bestand of map met deze naam.');
+    throw fail(409, 'A file or folder with this name already exists.');
   }
   async function availablePath(input, directory=false) {
     let target=await resolve(input,false);
@@ -216,14 +216,14 @@ export async function createApp(options = {}) {
     for(let n=1;;n++) {
       try { await absent(target.absolute);return target; }
       catch(error) {if(error.status!==409)throw error;}
-      if(n>10000)throw fail(409,'Geen vrije bestandsnaam gevonden.');
+      if(n>10000)throw fail(409,'No available filename found.');
       target=await resolve(`${stem} (${n})${ext}`,false);
     }
   }
   async function* walkEntries(rel,rejectIgnored=false,check=()=>{}) {
       check();
       if (ignored(rel)) {
-        if (rejectIgnored) throw fail(403, 'Deze map bevat uitgesloten bestanden en kan niet als geheel worden gewijzigd.');
+        if (rejectIgnored) throw fail(403, 'This folder contains excluded files and cannot be modified as a whole.');
         return;
       }
       const { absolute } = await resolve(rel);
@@ -240,9 +240,9 @@ export async function createApp(options = {}) {
     return bytes;
   }
   async function addUser(name, password, role) {
-    if (typeof name !== 'string' || !/^[\p{L}\p{N}_.@ -]{1,64}$/u.test(name.trim())) throw fail(400, 'Kies een gebruikersnaam van 1–64 tekens.');
-    if (typeof password !== 'string' || password.length < 12 || password.length > 1024) throw fail(400, 'Gebruik een wachtwoord van 12–1024 tekens.');
-    if (!['admin', 'editor', 'viewer'].includes(role)) throw fail(400, 'Onbekende rol.');
+    if (typeof name !== 'string' || !/^[\p{L}\p{N}_.@ -]{1,64}$/u.test(name.trim())) throw fail(400, 'Choose a username with 1–64 characters.');
+    if (typeof password !== 'string' || password.length < 12 || password.length > 1024) throw fail(400, 'Use a password with 12–1024 characters.');
+    if (!['admin', 'editor', 'viewer'].includes(role)) throw fail(400, 'Unknown role.');
     const salt = token();
     const digest = (await scrypt(password, salt, 64)).toString('hex');
     const user = { id: crypto.randomUUID(), name: name.trim(), role, salt, digest };
@@ -254,7 +254,7 @@ export async function createApp(options = {}) {
     db.prepare('DELETE FROM sessions WHERE expires <= ?').run(Date.now());
     if(user.guest&&db.prepare("SELECT count(*) AS n FROM sessions WHERE user_id='public'").get().n>=maxPublicSessions) {
       res.set('Retry-After','60');
-      throw fail(503,'Er zijn momenteel te veel openbare sessies. Probeer het later opnieuw of meld je aan met een account.');
+      throw fail(503,'There are too many public sessions. Try again later or sign in with an account.');
     }
     db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').run(hash(id), user.id, csrf, Date.now() + 7 * day);
     res.cookie('droppy_session', id, { httpOnly: true, sameSite: 'strict', secure:secureCookie||Boolean(res.req.socket.encrypted), ...(remember ? {maxAge:7*day} : {}), path: '/' });
@@ -268,8 +268,8 @@ export async function createApp(options = {}) {
     });
     if (req.path.startsWith('/api/') || req.path.startsWith('/s/')) res.set('Cache-Control', 'no-store');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers.origin) {
-      let origin; try { origin = new URL(req.headers.origin); } catch { return next(fail(403, 'Ongeldige herkomst.')); }
-      if (origin.host !== req.headers.host) return next(fail(403, 'Verzoek vanaf een andere website geweigerd.'));
+      let origin; try { origin = new URL(req.headers.origin); } catch { return next(fail(403, 'Invalid origin.')); }
+      if (origin.host !== req.headers.host) return next(fail(403, 'Request from another website denied.'));
     }
     const cookie = req.headers.cookie?.split(';').map(s => s.trim()).find(s => s.startsWith('droppy_session='))?.slice(15);
     if (cookie) {
@@ -288,13 +288,13 @@ export async function createApp(options = {}) {
   app.use((req,res,next) => {
     if (req.method === 'PUT' && req.path === '/api/upload') return next();
     if (req.method === 'POST' && req.path === '/api/text') {
-      if (!req.auth) return next(fail(401,'Log in om verder te gaan.'));
-      if (readOnly || req.auth.role === 'viewer' || req.get('x-csrf-token') !== req.auth.csrf) return next(fail(403,'Geen toestemming om tekst op te slaan.'));
+      if (!req.auth) return next(fail(401,'Sign in to continue.'));
+      if (readOnly || req.auth.role === 'viewer' || req.get('x-csrf-token') !== req.auth.csrf) return next(fail(403,'You do not have permission to save text.'));
       return textBody(req,res,next);
     }
     return jsonBody(req,res,next);
   });
-  app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'dirflux', version: '0.1.0-beta.7' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'dirflux', version: '0.1.0-beta.8' }));
   app.get('/api/session', (req, res) => {
     if(publicMode&&!req.auth&&req.query.login!=='1')return res.json({...session(res,guestUser),setup:false,setupTokenRequired:false,publicMode});
     const auth=req.query.login==='1'&&req.auth?.guest?null:req.auth;
@@ -304,21 +304,21 @@ export async function createApp(options = {}) {
     const result=attempts.consume(req.socket.remoteAddress);
     if(!result.allowed) {
       res.set('Retry-After',String(result.retryAfter));
-      return next(fail(429,'Te veel pogingen. Probeer het later opnieuw.'));
+      return next(fail(429,'Too many attempts. Try again later.'));
     }
     next();
   };
   app.post('/api/setup', throttle, async (req, res) => {
-    if (countUsers()) throw fail(409, 'Er bestaat al een beheerder.');
+    if (countUsers()) throw fail(409, 'An administrator already exists.');
     const supplied = req.get('x-setup-token') || req.body?.setupToken;
-    if (typeof supplied !== 'string' || !crypto.timingSafeEqual(Buffer.from(hash(supplied)),Buffer.from(hash(setupToken)))) throw fail(403, 'Gebruik de installatiecode uit het bestand setup-token in je configuratiemap.');
+    if (typeof supplied !== 'string' || !crypto.timingSafeEqual(Buffer.from(hash(supplied)),Buffer.from(hash(setupToken)))) throw fail(403, 'Use the setup code from the setup-token file in your configuration directory.');
     const { name, password } = req.body || {};
     // Recheck after async password hashing so two initial requests cannot create two admins.
     const salt = token();
-    if (typeof name !== 'string' || !/^[\p{L}\p{N}_.@ -]{1,64}$/u.test(name.trim())) throw fail(400, 'Ongeldige gebruikersnaam.');
-    if (typeof password !== 'string' || password.length < 12 || password.length > 1024) throw fail(400, 'Gebruik een wachtwoord van 12–1024 tekens.');
+    if (typeof name !== 'string' || !/^[\p{L}\p{N}_.@ -]{1,64}$/u.test(name.trim())) throw fail(400, 'Invalid username.');
+    if (typeof password !== 'string' || password.length < 12 || password.length > 1024) throw fail(400, 'Use a password with 12–1024 characters.');
     const digest = (await scrypt(password, salt, 64)).toString('hex');
-    if (countUsers()) throw fail(409, 'Er bestaat al een beheerder.');
+    if (countUsers()) throw fail(409, 'An administrator already exists.');
     const user = { id: crypto.randomUUID(), name: name.trim(), role: 'admin' };
     db.prepare('INSERT INTO users VALUES (?,?,?,?,?)').run(user.id, user.name, salt, digest, user.role);
     await fsp.rm(setupTokenPath,{force:true});
@@ -326,23 +326,23 @@ export async function createApp(options = {}) {
   });
   app.post('/api/login', throttle, async (req, res) => {
     const { name, password } = req.body || {};
-    if (typeof name !== 'string' || typeof password !== 'string' || password.length > 1024) throw fail(400, 'Ongeldige inloggegevens.');
+    if (typeof name !== 'string' || typeof password !== 'string' || password.length > 1024) throw fail(400, 'Invalid sign-in details.');
     const user = db.prepare('SELECT * FROM users WHERE name=?').get(name);
     const digest = await scrypt(password, user?.salt || 'unknown-user', 64);
     const currentUser = user && db.prepare('SELECT * FROM users WHERE id=?').get(user.id);
-    if (!user || !crypto.timingSafeEqual(digest, Buffer.from(user.digest, 'hex')) || currentUser?.digest !== user.digest) throw fail(401, 'Gebruikersnaam of wachtwoord klopt niet.');
+    if (!user || !crypto.timingSafeEqual(digest, Buffer.from(user.digest, 'hex')) || currentUser?.digest !== user.digest) throw fail(401, 'Incorrect username or password.');
     attempts.clear(req.socket.remoteAddress);
     res.json(session(res, currentUser, req.body.remember !== false));
   });
   app.get('/s/:id', async (req, res) => {
     // The optional extension is descriptive; authorization and MIME type use the stored target.
     const share = db.prepare('SELECT * FROM shares WHERE id=? AND (expires=0 OR expires>?)').get(req.params.id.split('.')[0], Date.now());
-    if (!share) throw fail(404, 'Deze downloadlink is verlopen of ingetrokken.');
+    if (!share) throw fail(404, 'This shared link has expired or been revoked.');
     const assertCurrent = () => {
-      if(closed)throw fail(503,'De server wordt afgesloten.');
+      if(closed)throw fail(503,'The server is shutting down.');
       const current=db.prepare('SELECT path,expires FROM shares WHERE id=?').get(share.id);
-      if(!current||(current.expires!==0&&current.expires<=Date.now()))throw fail(404,'Deze downloadlink is verlopen of ingetrokken.');
-      if(current.path!==share.path||moves.blocks(share.path)||trashOperations.blocks(share.path))throw fail(503,'Dit bestand wordt verplaatst. Probeer het later opnieuw.');
+      if(!current||(current.expires!==0&&current.expires<=Date.now()))throw fail(404,'This shared link has expired or been revoked.');
+      if(current.path!==share.path||moves.blocks(share.path)||trashOperations.blocks(share.path))throw fail(503,'This file is being moved. Try again later.');
     };
     assertCurrent();
     const { absolute } = await resolve(share.path);
@@ -365,11 +365,11 @@ export async function createApp(options = {}) {
     } finally {await handle.close();}
   });
   app.use('/api', (req, _res, next) => {
-    if (!req.auth) return next(fail(401, 'Log in om verder te gaan.'));
-    if (!['GET', 'HEAD'].includes(req.method) && req.get('x-csrf-token') !== req.auth.csrf) return next(fail(403, 'Ongeldig sessietoken. Herlaad de pagina.'));
+    if (!req.auth) return next(fail(401, 'Sign in to continue.'));
+    if (!['GET', 'HEAD'].includes(req.method) && req.get('x-csrf-token') !== req.auth.csrf) return next(fail(403, 'Invalid session token. Reload the page.'));
     next();
   });
-  const writable = (req, _res, next) => next(readOnly || req.auth.role === 'viewer' ? fail(403, 'Deze gebruiker heeft alleen leestoegang.') : undefined);
+  const writable = (req, _res, next) => next(readOnly || req.auth.role === 'viewer' ? fail(403, 'This user has read-only access.') : undefined);
   app.get('/api/events', (req, res) => {
     res.set({'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});
     res.flushHeaders();
@@ -387,7 +387,7 @@ export async function createApp(options = {}) {
     const sessionCheck=!keepAlive||keepAlive>20000?setInterval(validSession,20000):undefined;
     res.on('close',()=>{sink.close();clearInterval(heartbeat);clearInterval(sessionCheck);eventClients.delete(client);logger.debug('events.disconnected',{connections:eventClients.size});});
   });
-  const admin = (req, _res, next) => next(req.auth.role !== 'admin' ? fail(403, 'Alleen voor beheerders.') : undefined);
+  const admin = (req, _res, next) => next(req.auth.role !== 'admin' ? fail(403, 'Administrators only.') : undefined);
   // Serialize filesystem commits. Receiving an upload must not lock out other users.
   let mutationQueue = Promise.resolve();
   const mutate = async (req, res, handler) => {
@@ -397,8 +397,8 @@ export async function createApp(options = {}) {
     await previous;
     try {
       if (req.aborted || res.destroyed) return;
-      if (moves.hasPending() || trashOperations.hasPending()) throw fail(503, 'Een onderbroken verplaatsing moet eerst worden hersteld. Herstart de server.');
-      if (!db.prepare('SELECT id FROM sessions WHERE id=? AND expires>?').get(req.auth.session_id, Date.now())) throw fail(401, 'Je sessie is verlopen.');
+      if (moves.hasPending() || trashOperations.hasPending()) throw fail(503, 'An interrupted move must be recovered first. Restart the server.');
+      if (!db.prepare('SELECT id FROM sessions WHERE id=? AND expires>?').get(req.auth.session_id, Date.now())) throw fail(401, 'Your session has expired.');
       await handler();
     }
     finally { release(); }
@@ -412,11 +412,11 @@ export async function createApp(options = {}) {
     res.clearCookie('droppy_session', { path: '/' }); res.json({ ok: true });
   });
   write.post('/api/password', throttle, async (req, res) => {
-    if(req.auth.guest)throw fail(403,'Een openbare bezoeker heeft geen accountwachtwoord.');
+    if(req.auth.guest)throw fail(403,'A public visitor does not have an account password.');
     const { currentPassword, password } = req.body || {};
-    if (typeof currentPassword !== 'string' || currentPassword.length > 1024 || typeof password !== 'string' || password.length < 12 || password.length > 1024) throw fail(400, 'Gebruik een nieuw wachtwoord van 12–1024 tekens.');
+    if (typeof currentPassword !== 'string' || currentPassword.length > 1024 || typeof password !== 'string' || password.length < 12 || password.length > 1024) throw fail(400, 'Use a new password with 12–1024 characters.');
     const current = await scrypt(currentPassword, req.auth.salt, 64);
-    if (!crypto.timingSafeEqual(current, Buffer.from(req.auth.digest, 'hex'))) throw fail(403, 'Je huidige wachtwoord klopt niet.');
+    if (!crypto.timingSafeEqual(current, Buffer.from(req.auth.digest, 'hex'))) throw fail(403, 'Your current password is incorrect.');
     const salt = token(), digest = (await scrypt(password, salt, 64)).toString('hex');
     db.exec('BEGIN IMMEDIATE');
     try {
@@ -451,16 +451,16 @@ export async function createApp(options = {}) {
     res.json({path:relative,name:path.posix.basename(relative),directory:st.isDirectory(),size:st.size,modified:st.mtimeMs});
   });
   app.get('/api/search', async (req, res) => {
-    if (typeof req.query.q !== 'string' || !req.query.q.trim() || req.query.q.length > 256) throw fail(400, 'Gebruik een zoekterm van 1–256 tekens.');
+    if (typeof req.query.q !== 'string' || !req.query.q.trim() || req.query.q.length > 256) throw fail(400, 'Use a search term with 1–256 characters.');
     const q = req.query.q.toLowerCase();
     const { relative } = await resolve(req.query.path || '');
     const offset=Number(req.query.offset??0);
-    if(!Number.isSafeInteger(offset)||offset<0)throw fail(400,'Ongeldige zoekpagina.');
+    if(!Number.isSafeInteger(offset)||offset<0)throw fail(400,'Invalid search page.');
     const items=[];let matched=0;
     const deadline=Date.now()+30000;
     for await(const item of walkEntries(relative,false,()=>{
-      if(res.destroyed)throw fail(499,'Zoekopdracht geannuleerd.');
-      if(Date.now()>deadline)throw fail(503,'Zoeken duurt te lang; kies een kleinere map.');
+      if(res.destroyed)throw fail(499,'Search cancelled.');
+      if(Date.now()>deadline)throw fail(503,'Search timed out; choose a smaller folder.');
     })) {
       if(item.path===relative||!(item.directory?item.path:path.posix.basename(item.path)).toLowerCase().includes(q))continue;
       if(matched++<offset)continue;
@@ -473,7 +473,7 @@ export async function createApp(options = {}) {
   async function authenticatedFile(req,res,pdfOnly=false) {
     const { absolute } = await resolve(req.query.path);
     const ext = path.extname(absolute).toLowerCase();
-    if(pdfOnly&&ext!=='.pdf')throw fail(415,'Dit is geen PDF-bestand.');
+    if(pdfOnly&&ext!=='.pdf')throw fail(415,'This is not a PDF file.');
     // Pin the opened file for the entire response, including HEAD/range handling.
     // Never render user-controlled HTML/SVG/scripts under the application origin.
     const inline=!pdfOnly&&req.query.download!=='1'&&canInlineFile(absolute);
@@ -489,7 +489,7 @@ export async function createApp(options = {}) {
     guard();
     const archive = new ZipArchive({ zlib: { level: 5 } });
     const streams=new Set();
-    res.attachment((path.posix.basename(relative) || 'bestanden') + '.zip');
+    res.attachment((path.posix.basename(relative) || 'files') + '.zip');
     archive.on('error', error => res.destroy(error));
     archive.on('warning', error => res.destroy(error));
     res.on('close', () => { if (!res.writableEnded) {archive.abort();for(const stream of streams)stream.destroy();} });
@@ -498,14 +498,14 @@ export async function createApp(options = {}) {
       const cleanup=()=>{archive.off('entry',done);archive.off('error',failed);archive.off('warning',failed);res.off('close',cancelled);};
       const done=()=>{cleanup();resolve();};
       const failed=error=>{cleanup();reject(error);};
-      const cancelled=()=>failed(fail(499,'Download geannuleerd.'));
+      const cancelled=()=>failed(fail(499,'Download cancelled.'));
       if(res.destroyed)return cancelled();
       archive.once('entry',done);archive.once('error',failed);archive.once('warning',failed);res.once('close',cancelled);
       try {archive.append(source,metadata);} catch(error) {failed(error);}
     });
     const base = relative ? path.posix.dirname(relative) : '';
     try {
-    for await(const item of walkEntries(relative,false,()=>{if(res.destroyed)throw fail(499,'Download geannuleerd.');guard();})) {
+    for await(const item of walkEntries(relative,false,()=>{if(res.destroyed)throw fail(499,'Download cancelled.');guard();})) {
       const name = base && base !== '.' ? item.path.slice(base.length + 1) : item.path;
       if (!name) continue;
       if (item.directory) await appendEntry('', { name: name + '/' });
@@ -531,14 +531,14 @@ export async function createApp(options = {}) {
   app.get('/api/text', async (req, res) => {
     const { absolute } = await resolve(req.query.path);
     const bytes = await readLimitedFile(absolute,maxText);
-    if (bytes.includes(0)) throw fail(415, 'Dit is een binair bestand. Download het om te openen.');
-    let text; try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); } catch { throw fail(415, 'Alleen UTF-8-tekst kan worden bewerkt.'); }
+    if (bytes.includes(0)) throw fail(415, 'This is a binary file. Download it to open it.');
+    let text; try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); } catch { throw fail(415, 'Only UTF-8 text can be edited.'); }
     res.json({ text, version: hash(bytes) });
   });
   write.post('/api/text', writable, async (req, res) => {
     const { absolute } = await resolve(req.body.path);
-    if (typeof req.body.text !== 'string' || Buffer.byteLength(req.body.text) > maxText) throw fail(413, `Maximaal ${maxText} bytes tekst.`);
-    if (hash(await readLimitedFile(absolute,maxText)) !== req.body.version) throw fail(409, 'Het bestand is ondertussen gewijzigd. Open het opnieuw voordat je opslaat.');
+    if (typeof req.body.text !== 'string' || Buffer.byteLength(req.body.text) > maxText) throw fail(413, `Maximum text size: ${maxText} bytes.`);
+    if (hash(await readLimitedFile(absolute,maxText)) !== req.body.version) throw fail(409, 'The file has changed. Reopen it before saving.');
     const temp = path.join(path.dirname(absolute), '.app-tmp-' + crypto.randomUUID());
     try {
       await fsp.writeFile(temp, req.body.text, { flag: 'wx', mode: (await fsp.stat(absolute)).mode });
@@ -548,7 +548,7 @@ export async function createApp(options = {}) {
   });
   write.post('/api/create', writable, async (req, res) => {
     const { absolute, relative } = await resolve(req.body.path, false);
-    if (!relative) throw fail(400, 'Geef een naam op.');
+    if (!relative) throw fail(400, 'Enter a name.');
     await absent(absolute);
     if (req.body.directory) await fsp.mkdir(absolute);
     else await fsp.writeFile(absolute, '', { flag: 'wx' });
@@ -557,7 +557,7 @@ export async function createApp(options = {}) {
   const fileVersion = st => hash([st.dev, st.ino, st.size, st.mtimeMs, st.ctimeMs].join(':'));
   app.get('/api/upload-target', writable, async (req, res) => {
     const { absolute, relative } = await resolve(req.query.path, false);
-    if (!relative) throw fail(400, 'Geef een bestandsnaam op.');
+    if (!relative) throw fail(400, 'Enter a filename.');
     try {
       const st = await fsp.stat(absolute);
       res.json({ exists:true, directory:st.isDirectory(), version:fileVersion(st) });
@@ -574,21 +574,21 @@ export async function createApp(options = {}) {
     next();
   };
   app.put('/api/upload', writable, uploadDeadline, async (req, res) => {
-    if (maxUpload && Number(req.headers['content-length']) > maxUpload) throw fail(413, 'Bestand is groter dan de uploadlimiet.');
+    if (maxUpload && Number(req.headers['content-length']) > maxUpload) throw fail(413, 'The file exceeds the upload limit.');
     let { absolute, relative } = await resolve(req.query.path, false);
-    if (!relative) throw fail(400, 'Geef een bestandsnaam op.');
+    if (!relative) throw fail(400, 'Enter a filename.');
     const conflict = req.query.conflict || 'reject';
-    if (!['reject','replace','rename'].includes(conflict)) throw fail(400, 'Onbekende keuze bij uploadconflict.');
+    if (!['reject','replace','rename'].includes(conflict)) throw fail(400, 'Unknown upload conflict option.');
     let previous;
     if (conflict === 'replace') {
       previous = await fsp.stat(absolute);
-      if (!previous.isFile()) throw fail(409, 'Een map kan niet door een bestand worden vervangen.');
-      if (fileVersion(previous) !== req.query.version) throw fail(409, 'Het bestand is ondertussen gewijzigd. Bevestig opnieuw voordat je overschrijft.');
+      if (!previous.isFile()) throw fail(409, 'A folder cannot be replaced by a file.');
+      if (fileVersion(previous) !== req.query.version) throw fail(409, 'The file has changed. Confirm again before overwriting it.');
     } else if (conflict === 'reject') await absent(absolute);
     const {id:uploadId,temporary} = uploads.begin();
     let staged;
     let bytes = 0;
-    const limit = new Transform({ transform(chunk, _encoding, cb) { bytes += chunk.length; cb(maxUpload && bytes > maxUpload ? fail(413, 'Bestand is groter dan de uploadlimiet.') : null, chunk); } });
+    const limit = new Transform({ transform(chunk, _encoding, cb) { bytes += chunk.length; cb(maxUpload && bytes > maxUpload ? fail(413, 'The file exceeds the upload limit.') : null, chunk); } });
     try {
       await pipeline(req, limit, fs.createWriteStream(temporary, { flags: 'wx' }));
       await mutate(req,res,async()=>{
@@ -602,7 +602,7 @@ export async function createApp(options = {}) {
       await options.uploadCheckpoint?.('staged');
       if (previous) {
         await resolve(relative);
-        if (fileVersion(await fsp.stat(absolute)) !== req.query.version) throw fail(409, 'Het bestand is tijdens de upload gewijzigd. Het is niet overschreven.');
+        if (fileVersion(await fsp.stat(absolute)) !== req.query.version) throw fail(409, 'The file changed during upload. It was not overwritten.');
         await fsp.chmod(staged, previous.mode);
         await fsp.rename(staged, absolute);
       } else {
@@ -622,20 +622,20 @@ export async function createApp(options = {}) {
   write.post('/api/transfer', writable, async (req, res) => {
     const source = await resolve(req.body.source);
     let target = await resolve(req.body.target, false);
-    if (!source.relative || !target.relative) throw fail(400, 'De hoofdmap kan niet worden verplaatst.');
-    if (target.absolute.toLowerCase().startsWith(source.absolute.toLowerCase() + path.sep)) throw fail(400, 'Een map kan niet naar zichzelf worden gekopieerd.');
-    if (!['move', 'copy'].includes(req.body.operation)) throw fail(400, 'Onbekende bewerking.');
-    if (!['reject','rename'].includes(req.body.conflict || 'reject')) throw fail(400, 'Onbekende keuze bij naamconflict.');
+    if (!source.relative || !target.relative) throw fail(400, 'The root folder cannot be moved.');
+    if (target.absolute.toLowerCase().startsWith(source.absolute.toLowerCase() + path.sep)) throw fail(400, 'A folder cannot be copied into itself.');
+    if (!['move', 'copy'].includes(req.body.operation)) throw fail(400, 'Unknown operation.');
+    if (!['reject','rename'].includes(req.body.conflict || 'reject')) throw fail(400, 'Unknown name conflict option.');
     if (req.body.conflict === 'rename') target=await availablePath(target.relative,(await fsp.stat(source.absolute)).isDirectory());
     await absent(target.absolute);
-    for await(const item of walkEntries(source.relative,true)) if (ignored(target.relative+item.path.slice(source.relative.length))) throw fail(403, 'De doelmap zou uitgesloten bestanden bevatten.');
+    for await(const item of walkEntries(source.relative,true)) if (ignored(target.relative+item.path.slice(source.relative.length))) throw fail(403, 'The destination folder would contain excluded files.');
     if (req.body.operation === 'copy') await fsp.cp(source.absolute, target.absolute, { recursive: true, force: false, errorOnExist: true, filter: async p => !(await fsp.lstat(p)).isSymbolicLink() });
     else await moves.move(source,target);
     res.json({ ok: true, path:target.relative });
   });
   write.post('/api/trash', writable, async (req, res) => {
     const { relative, absolute } = await resolve(req.body.path);
-    if (!relative) throw fail(400, 'De hoofdmap kan niet worden verwijderd.');
+    if (!relative) throw fail(400, 'The root folder cannot be deleted.');
     if (ignoreMatchers.length) for await(const _item of walkEntries(relative,true)) { /* Validate every descendant before deleting a parent. */ }
     const id = crypto.randomUUID();
     await trashOperations.move('trash', { id, path: relative, deleted: Date.now(), owner: req.auth.id });
@@ -644,9 +644,9 @@ export async function createApp(options = {}) {
   app.get('/api/trash', (req, res) => res.json({ items: req.auth.role === 'admin' ? db.prepare('SELECT * FROM trash ORDER BY deleted DESC').all() : db.prepare('SELECT * FROM trash WHERE owner=? ORDER BY deleted DESC').all(req.auth.id) }));
   write.delete('/api/trash/:id', writable, async (req, res) => {
     const row = db.prepare('SELECT * FROM trash WHERE id=?').get(req.params.id);
-    if (!row || (row.owner !== req.auth.id && req.auth.role !== 'admin')) throw fail(404, 'Item niet gevonden.');
+    if (!row || (row.owner !== req.auth.id && req.auth.role !== 'admin')) throw fail(404, 'Item not found.');
     const target = path.resolve(trashDir,row.id);
-    if (path.dirname(target) !== path.resolve(trashDir)) throw fail(400, 'Ongeldig prullenbakitem.');
+    if (path.dirname(target) !== path.resolve(trashDir)) throw fail(400, 'Invalid trash item.');
     // rm removes directory links themselves; it must never dereference them.
     await fsp.rm(target,{recursive:true,force:true});
     db.prepare('DELETE FROM trash WHERE id=?').run(row.id);
@@ -654,7 +654,7 @@ export async function createApp(options = {}) {
   });
   write.post('/api/restore', writable, async (req, res) => {
     const row = db.prepare('SELECT * FROM trash WHERE id=?').get(req.body.id);
-    if (!row || (row.owner !== req.auth.id && req.auth.role !== 'admin')) throw fail(404, 'Item niet gevonden.');
+    if (!row || (row.owner !== req.auth.id && req.auth.role !== 'admin')) throw fail(404, 'Item not found.');
     const { absolute } = await resolve(row.path, false);
     await absent(absolute); await fsp.mkdir(path.dirname(absolute), { recursive: true });
     await trashOperations.move('restore', row);
@@ -666,29 +666,29 @@ export async function createApp(options = {}) {
   });
   write.post('/api/shares', writable, async (req, res) => {
     const { relative } = await resolve(req.body.path);
-    if (!relative) throw fail(400, 'Deel een bestand of submap.');
-    if (req.body.download !== undefined && typeof req.body.download !== 'boolean') throw fail(400, 'Kies openen of downloaden.');
+    if (!relative) throw fail(400, 'Share a file or subfolder.');
+    if (req.body.download !== undefined && typeof req.body.download !== 'boolean') throw fail(400, 'Choose open or download.');
     const download = req.body.download !== false || (await fsp.stat((await resolve(relative)).absolute)).isDirectory();
     const hours = Number(req.body.hours ?? 0);
-    if (!Number.isFinite(hours) || (hours !== 0 && hours < 1) || hours > 720) throw fail(400, 'Kies 0 (geen vervaldatum) of 1–720 uur.');
+    if (!Number.isFinite(hours) || (hours !== 0 && hours < 1) || hours > 720) throw fail(400, 'Choose 0 (no expiry) or 1–720 hours.');
     const id = token(), expires = hours === 0 ? 0 : Date.now() + hours * 3600000;
     db.prepare('INSERT INTO shares (id,path,expires,owner,download) VALUES (?,?,?,?,?)').run(id, relative, expires, req.auth.id, Number(download));
     res.status(201).json({ id, url:shareUrl({id,path:relative}), expires, download });
   });
   write.delete('/api/shares/:id', (req, res) => {
     const share = db.prepare('SELECT * FROM shares WHERE id=?').get(req.params.id);
-    if (!share || (share.owner !== req.auth.id && req.auth.role !== 'admin')) throw fail(404, 'Link niet gevonden.');
+    if (!share || (share.owner !== req.auth.id && req.auth.role !== 'admin')) throw fail(404, 'Link not found.');
     db.prepare('DELETE FROM shares WHERE id=?').run(share.id); res.json({ ok: true });
   });
   app.get('/api/users', admin, (_req, res) => res.json({ items: db.prepare('SELECT id,name,role FROM users ORDER BY name').all() }));
   write.post('/api/users', admin, async (req, res) => { const u = await addUser(req.body.name, req.body.password, req.body.role); res.status(201).json(publicUser(u)); });
   write.put('/api/users/:id', admin, throttle, async (req, res) => {
-    if (req.params.id === req.auth.id) throw fail(400, 'Wijzig je eigen wachtwoord via Mijn account. Je kunt je eigen rol niet wijzigen.');
+    if (req.params.id === req.auth.id) throw fail(400, 'Change your password in My account. You cannot change your own role.');
     const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-    if (!user) throw fail(404, 'Gebruiker niet gevonden.');
+    if (!user) throw fail(404, 'User not found.');
     const {role=user.role,password} = req.body || {};
-    if (!['admin','editor','viewer'].includes(role)) throw fail(400, 'Onbekende rol.');
-    if (password !== undefined && (typeof password !== 'string' || password.length < 12 || password.length > 1024)) throw fail(400, 'Gebruik een wachtwoord van 12–1024 tekens.');
+    if (!['admin','editor','viewer'].includes(role)) throw fail(400, 'Unknown role.');
+    if (password !== undefined && (typeof password !== 'string' || password.length < 12 || password.length > 1024)) throw fail(400, 'Use a password with 12–1024 characters.');
     if (password === undefined && role === user.role) return res.json(publicUser(user));
     let salt=user.salt, digest=user.digest;
     if (password !== undefined) { salt=token(); digest=(await scrypt(password,salt,64)).toString('hex'); }
@@ -703,7 +703,7 @@ export async function createApp(options = {}) {
     res.json(publicUser({...user,role}));
   });
   write.delete('/api/users/:id', admin, (req, res) => {
-    if (req.params.id === req.auth.id) throw fail(400, 'Je kunt je eigen account niet verwijderen.');
+    if (req.params.id === req.auth.id) throw fail(400, 'You cannot delete your own account.');
     db.exec('BEGIN IMMEDIATE');
     try {
       db.prepare('DELETE FROM sessions WHERE user_id=?').run(req.params.id);
@@ -713,17 +713,17 @@ export async function createApp(options = {}) {
     } catch(error) {db.exec('ROLLBACK');throw error;}
     res.json({ ok: true });
   });
-  app.use('/api', (_req, _res, next) => next(fail(404, 'Onbekend API-adres.')));
+  app.use('/api', (_req, _res, next) => next(fail(404, 'Unknown API endpoint.')));
   app.use(express.static(path.join(here, 'public'), { etag: true, maxAge: 0 }));
   app.use((error, _req, res, _next) => {
     if (res.destroyed) return;
     if (res.headersSent) return res.destroy();
-    const known = { ENOENT: [404, 'Bestand of map niet gevonden.'], EEXIST: [409, 'Deze naam bestaat al.'], ENOTDIR: [400, 'Dit is geen map.'], EISDIR: [400, 'Dit is een map.'], EACCES: [403, 'Geen toegang tot dit bestand.'], EPERM: [403, 'Deze bewerking is niet toegestaan.'], ENOSPC: [507, 'Onvoldoende schijfruimte.'] };
+    const known = { ENOENT: [404, 'File or folder not found.'], EEXIST: [409, 'This name already exists.'], ENOTDIR: [400, 'This is not a folder.'], EISDIR: [400, 'This is a folder.'], EACCES: [403, 'Access to this file is denied.'], EPERM: [403, 'This operation is not allowed.'], ENOSPC: [507, 'Not enough disk space.'] };
     const mapped = known[error.code];
     const duplicate = String(error.message).includes('UNIQUE constraint failed');
     const status = mapped?.[0] || (duplicate ? 409 : error.status || 500);
     if (status >= 500) logger.error('http.error',{code:error.code||'INTERNAL_ERROR',status});
-    res.status(status).json({ error: mapped?.[1] || (duplicate ? 'Deze gebruikersnaam bestaat al.' : status === 500 ? 'Er ging iets mis op de server.' : error.message) });
+    res.status(status).json({ error: mapped?.[1] || (duplicate ? 'This username already exists.' : status === 500 ? 'Something went wrong on the server.' : error.message) });
   });
   const stopEvents = cleanupStartup;
   const listen=(...args)=>{

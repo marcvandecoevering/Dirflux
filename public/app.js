@@ -24,7 +24,7 @@ const basename = value => value.split('/').at(-1);
 const active = () => state.panes[state.active];
 const canWrite = () => canEditSession(state);
 const size = n => n < 1024 ? n + ' B' : n < 1024 ** 2 ? (n / 1024).toFixed(1) + ' KB' : n < 1024 ** 3 ? (n / 1024 ** 2).toFixed(1) + ' MB' : (n / 1024 ** 3).toFixed(1) + ' GB';
-const date = n => new Intl.DateTimeFormat('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' }).format(n);
+const date = n => new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(n);
 const kind = item => item.directory ? 'folder' : isImage(item) ? 'image' : isAudio(item)||isVideo(item) ? 'media' : 'file';
 let toastTimer, closeHook = null, refreshBusy = false;
 const uploadJobs = new Set();
@@ -53,7 +53,7 @@ function paneNav() {
 }
 async function showPrefs() {
   const {themeNames}=await import('/vendor/extras.js');
-  showDialog('Preferences', `<form class="dialog-form" id="prefs-form"><label>Editor theme<select name="theme"><option value="droppy">Dirflux</option><option value="dark">one dark</option><option value="light">light</option></select></label><label>Editor font size<select name="editorFontSize">${Array.from({length:11},(_,i)=>`<option>${10+i*2}</option>`).join('')}</select></label><label>Editor indent type<select name="indentWithTabs"><option value="false">Spaces</option><option value="true">Tabs</option></select></label><label>Editor indent width<select name="indentUnit">${[1,2,4,8].map(n=>`<option>${n}</option>`).join('')}</select></label><label>Editor word wrap<select name="lineWrapping"><option value="false">No wrap</option><option value="true">Wrap</option></select></label><label>Sharelink download<select name="sharelinkDownload"><option value="true">Default on</option><option value="false">Default off</option></select></label><div class="prefs-buttons"><button type="button" class="secondary" data-prefs="shares">Shared links</button><button type="button" class="secondary" data-prefs="trash">Trash</button>${state.user.guest?'<a class="secondary" href="/?login=1">Sign in</a>':'<button type="button" class="secondary" data-prefs="account">Account</button>'}${state.user.role==='admin'?'<button type="button" class="secondary" data-prefs="users">Users</button>':''}</div><div class="dialog-actions"><button class="primary" type="submit">Save</button></div></form>`);
+  showDialog('Preferences', `<form class="dialog-form" id="prefs-form"><label>Editor theme<select name="theme"><option value="droppy">Dirflux</option><option value="dark">one dark</option><option value="light">light</option></select></label><label>Editor font size<select name="editorFontSize">${Array.from({length:11},(_,i)=>`<option>${10+i*2}</option>`).join('')}</select></label><label>Editor indent type<select name="indentWithTabs"><option value="false">Spaces</option><option value="true">Tabs</option></select></label><label>Editor indent width<select name="indentUnit">${[1,2,4,8].map(n=>`<option>${n}</option>`).join('')}</select></label><label>Editor word wrap<select name="lineWrapping"><option value="false">No wrap</option><option value="true">Wrap</option></select></label><label>Shared link default<select name="sharelinkDownload"><option value="true">Download directly</option><option value="false">Open in browser</option></select></label><div class="prefs-buttons"><button type="button" class="secondary" data-prefs="shares">Shared links</button><button type="button" class="secondary" data-prefs="trash">Trash</button>${state.user.guest?'<a class="secondary" href="/?login=1">Sign in</a>':'<button type="button" class="secondary" data-prefs="account">Account</button>'}${state.user.role==='admin'?'<button type="button" class="secondary" data-prefs="users">Users</button>':''}</div><div class="dialog-actions"><button class="primary" type="submit">Save</button></div></form>`);
   $('#prefs-form [name=theme]').innerHTML=themeNames.map(name=>`<option>${escape(name)}</option>`).join('');
   for(const [key,value] of Object.entries(prefs)) { const input=$(`#prefs-form [name="${key}"]`); if(input)input.value=String(value); }
   on($('#prefs-form'),'submit',e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget)); for(const [key,value] of Object.entries(data)) prefs[key]=['true','false'].includes(value)?value==='true':/^\d+$/.test(value)?Number(value):value;localStorage.setItem('droppy-next-prefs',JSON.stringify(prefs));closeDialog();toast('Preferences saved.');});
@@ -84,7 +84,7 @@ async function api(url, options = {}) {
         state.user=null;state.csrf=null;await init();
       }
     }
-    throw new Error(body.error || 'Verzoek mislukt.');
+    throw new Error(body.error || 'Request failed.');
   }
   return body;
 }
@@ -108,7 +108,7 @@ function confirmDiscardChanges() {
   const dialog = document.createElement('dialog');
   dialog.className = 'discard-dialog';
   dialog.setAttribute('aria-labelledby', 'discard-title');
-  dialog.innerHTML = '<h2 id="discard-title">Niet-opgeslagen wijzigingen</h2><p>Je wijzigingen zijn nog niet opgeslagen. Wil je verder bewerken of ze verwerpen?</p><form method="dialog" class="dialog-actions"><button value="cancel" class="secondary" autofocus>Verder bewerken</button><button value="discard" class="danger">Wijzigingen verwerpen</button></form>';
+  dialog.innerHTML = '<h2 id="discard-title">Unsaved changes</h2><p>Your changes have not been saved. Keep editing or discard them?</p><form method="dialog" class="dialog-actions"><button value="cancel" class="secondary" autofocus>Keep editing</button><button value="discard" class="danger">Discard changes</button></form>';
   discardPrompt = new Promise(resolve => {
     dialog.addEventListener('close', () => {
       const discard = dialog.returnValue === 'discard';
@@ -123,22 +123,22 @@ function confirmDiscardChanges() {
 function pauseEditorSession(owner) {
   const editor=editorInstance,status=$('#editor-status'),save=$('#save');
   document.body.classList.add('read-only');save.disabled=true;
-  status.replaceChildren(document.createTextNode('Sessie verlopen. Je concept blijft hier behouden. '));
-  const login=document.createElement('a');login.href='/?login=1';login.target='_blank';login.rel='noopener';login.textContent='Opnieuw aanmelden';
-  const resume=document.createElement('button');resume.type='button';resume.textContent='Sessie controleren';
+  status.replaceChildren(document.createTextNode('Session expired. Your draft is preserved here. '));
+  const login=document.createElement('a');login.href='/?login=1';login.target='_blank';login.rel='noopener';login.textContent='Sign in again';
+  const resume=document.createElement('button');resume.type='button';resume.textContent='Check session';
   status.append(login,document.createTextNode(' '),resume);
   on(resume,'click',async()=>{
     resume.disabled=true;
     try {
       const response=await fetch('/api/session?login=1',{cache:'no-store'});
-      if(!response.ok)throw new Error('De sessie kon niet worden gecontroleerd.');
+      if(!response.ok)throw new Error('Could not check the session.');
       const session=await response.json();
       if(editorInstance!==editor||!status.isConnected)return;
-      if(!canEditSession(session,owner))throw new Error('Meld je aan met hetzelfde account met bewerkrechten. Je concept blijft behouden.');
+      if(!canEditSession(session,owner))throw new Error('Sign in with the same account with editing permission. Your draft is preserved.');
       Object.assign(state,session);document.body.classList.remove('read-only');
       save.disabled=false;status.textContent='Unsaved changes';
       if(viewerMode)window.parent.resumeWorkspaceSession?.(session,owner,window);
-      toast('Sessie hersteld. Je kunt het concept nu opslaan.');
+      toast('Session restored. You can now save your draft.');
     } finally {if(resume.isConnected)resume.disabled=false;}
   });
 }
@@ -156,7 +156,7 @@ function pauseWorkspaceSession(owner) {
   for(const job of uploadJobs)job.cancel();
   eventSource?.close();eventSource=null;
   for(const frame of frames)frame.contentWindow.pauseExpiredEditor?.(owner);
-  toast('Sessie verlopen. Meld je opnieuw aan via je open editor. Je concepten blijven behouden.',true);
+  toast('Session expired. Sign in again from your open editor. Your drafts are preserved.',true);
   return true;
 }
 window.pauseWorkspaceSession=pauseWorkspaceSession;
@@ -201,10 +201,10 @@ function showDialog(title, html, className = '') {
   if (!$('#dialog').open) $('#dialog').showModal();
 }
 async function formDialog(title, fields, submitLabel, handler, description = '') {
-  showDialog(title, `${description ? `<p>${escape(description)}</p>` : ''}<form id="modal-form" class="dialog-form">${fields}<div id="modal-error" class="dialog-error" role="alert"></div><div class="dialog-actions"><button type="button" class="secondary" id="modal-cancel">Annuleren</button><button type="submit" class="primary">${escape(submitLabel)}</button></div></form>`);
+  showDialog(title, `${description ? `<p>${escape(description)}</p>` : ''}<form id="modal-form" class="dialog-form">${fields}<div id="modal-error" class="dialog-error" role="alert"></div><div class="dialog-actions"><button type="button" class="secondary" id="modal-cancel">Cancel</button><button type="submit" class="primary">${escape(submitLabel)}</button></div></form>`);
   $('#modal-cancel').onclick = closeDialog;
   const form=$('#modal-form'),errorBox=$('#modal-error'),closeButton=$('#dialog-close');
-  const progress=document.createElement('div');progress.setAttribute('role','status');progress.hidden=true;progress.textContent='Bezig… Wacht tot de bewerking is afgerond.';form.append(progress);
+  const progress=document.createElement('div');progress.setAttribute('role','status');progress.hidden=true;progress.textContent='Working… Please wait until the operation finishes.';form.append(progress);
   let submitting=false;
   closeHook=()=>!submitting;
   form.addEventListener('submit', async e => {
@@ -233,7 +233,7 @@ function setActive(index) {
 function updateSelection() {
   const n = active().selected.size;
   $('#selection-bar').hidden = !n;
-  $('#selection-count').textContent = `${n} geselecteerd`;
+  $('#selection-count').textContent = `${n} selected`;
 }
 async function loadPane(index, quiet = false) {
   const pane = state.panes[index]; if (!pane) return;
@@ -247,14 +247,14 @@ async function loadPane(index, quiet = false) {
   pane.nextOffset=data.nextOffset??null;pane.searchOffset=0;
   pane.selected = new Set([...pane.selected].filter(p => pane.items.some(i => i.path === p)));
   if (!quiet || changed) renderPane(index);
-  if (data.truncated && !quiet) toast('Er zijn meer resultaten. Gebruik Meer resultaten onderaan de lijst.');
+  if (data.truncated && !quiet) toast('More results are available. Use More results at the bottom of the list.');
 }
 async function refreshAll(quiet = false) {
   if (!state.user || refreshBusy) return;
   refreshBusy = true;
   try {
     await Promise.all(state.panes.map((_, i) => loadPane(i, quiet)));
-    $('#connection').textContent = 'Wijzigingen worden automatisch bijgewerkt'; $('#connection').className = '';
+    $('#connection').textContent = 'Changes are refreshed automatically'; $('#connection').className = '';
   } catch (error) {
     $('#connection').textContent = error.message; $('#connection').className = 'connection-error';
     if (!quiet) throw error;
@@ -271,7 +271,7 @@ async function togglePaneFullscreen(index) {
   element.classList.add('is-fullscreen');
   if(document.fullscreenEnabled&&element.requestFullscreen) {
     try {await element.requestFullscreen();nativeFullscreenPane=element;}
-    catch {toast('Vergroot binnen de app; deze browser staat volledig scherm niet toe.');}
+    catch {toast('Use the expanded view in the app; this browser does not allow full screen.');}
   }
 }
 document.addEventListener('fullscreenchange',()=>{
@@ -337,7 +337,7 @@ async function restoreLocation(fromHistory=false) {
 function renderPanes() {
   $('#panes').classList.toggle('split', state.panes.length === 2);
   while($('#panes').children.length>state.panes.length)$('#panes').lastElementChild.remove();
-  state.panes.forEach((_,i)=>{if(!$(`[data-pane="${i}"]`)){const el=document.createElement('article');el.className='pane';el.dataset.pane=i;el.setAttribute('aria-label',`Bestandsvenster ${i+1}`);$('#panes').append(el);}});
+  state.panes.forEach((_,i)=>{if(!$(`[data-pane="${i}"]`)){const el=document.createElement('article');el.className='pane';el.dataset.pane=i;el.setAttribute('aria-label',`File pane ${i+1}`);$('#panes').append(el);}});
   setActive(state.active);
   state.panes.forEach((_, i) => renderPane(i));
 }
@@ -345,13 +345,13 @@ function renderPane(index) {
   const pane = state.panes[index], el = $(`[data-pane="${index}"]`); if (!el) return;
   if(pane.open&&el.querySelector('iframe'))return;
   const parts = pane.path.split('/').filter(Boolean);
-  let crumbs = `<button data-path="" title="Hoofdmap">${icons('home')}</button><span>/</span><button data-path="">Bestanden</button>`;
+  let crumbs = `<button data-path="" title="Root folder">${icons('home')}</button><span>/</span><button data-path="">Files</button>`;
   parts.forEach((p, i) => crumbs += `<span>/</span><button data-path="${escape(parts.slice(0, i + 1).join('/'))}">${escape(p)}</button>`);
-  const items = [...pane.items].sort((a, b) => Number(b.directory) - Number(a.directory) || (pane.sort === 'name' ? a.name.localeCompare(b.name, 'nl', { numeric: true }) : a[pane.sort] - b[pane.sort]) * (pane.descending ? -1 : 1));
+  const items = [...pane.items].sort((a, b) => Number(b.directory) - Number(a.directory) || (pane.sort === 'name' ? a.name.localeCompare(b.name, 'en', { numeric: true }) : a[pane.sort] - b[pane.sort]) * (pane.descending ? -1 : 1));
   const sortTitle = (key, label) => `<button data-sort="${key}">${label}${pane.sort === key ? pane.descending ? ' ↓' : ' ↑' : ''}</button>`;
-  el.innerHTML = `${paneNav()}<div class="pane-toolbar"><button class="icon-button" data-up aria-label="Bovenliggende map" ${!pane.path ? 'disabled' : ''}>${icons('arrow')}</button><div class="breadcrumbs">${crumbs}</div>${state.panes.length === 2 ? `<span class="pane-label">${index === 0 ? 'LINKS' : 'RECHTS'}</span>` : ''}</div><div class="table-wrap"><table><thead><tr><th><input type="checkbox" data-all aria-label="Alles selecteren" ${items.length && pane.selected.size === items.length ? 'checked' : ''}></th><th>${sortTitle('name', pane.query ? 'Search results' : 'Name')}</th><th>${sortTitle('modified', 'Modified')}</th><th>${sortTitle('size', 'Size')}</th><th></th></tr></thead><tbody>${items.map(item => `<tr data-item="${escape(item.path)}" class="${pane.selected.has(item.path) ? 'selected' : ''}"><td><input type="checkbox" data-select aria-label="Selecteer ${escape(item.name)}" ${pane.selected.has(item.path) ? 'checked' : ''}></td><td><button class="file-name" data-open title="${escape(item.name)}"><span class="file-icon ${kind(item)}">${icons(kind(item))}</span><span>${escape(item.name)}${pane.query ? `<span class="file-path">${escape(parent(item.path) || 'Bestanden')}</span>` : ''}</span></button></td><td class="file-meta" title="${escape(new Date(item.modified).toLocaleString())}">${date(item.modified)}</td><td class="file-meta">${item.size===null ? '—' : size(item.size)}</td><td><div class="row-actions">${canWrite()?`<button class="icon-button write" data-share aria-label="Share ${escape(item.name)}" title="Share">${originalIcon('link')}</button>`:''}<button class="icon-button" data-download aria-label="Download ${escape(item.name)}" title="Download">${originalIcon('download')}</button>${canWrite()?`<button class="icon-button write" data-trash aria-label="Delete ${escape(item.name)}" title="Delete">${originalIcon('trash')}</button>`:''}<button class="icon-button" data-menu aria-label="Acties voor ${escape(item.name)}" title="Actions">${originalIcon('menu')}</button></div></td></tr>`).join('')}</tbody></table>${items.length ? '' : `<div class="empty">${originalIcon(pane.query ? 'find' : 'upload-cloud')}<strong>${pane.query ? 'No results' : 'Add files'}</strong><p>${pane.query ? 'Probeer een andere zoekterm.' : 'Deze map is nog leeg.<br>Sleep bestanden hierheen of begin met een nieuwe map.'}</p>${canWrite() && !pane.query ? '<button class="secondary" data-empty-upload>Bestanden uploaden</button>' : ''}</div>`}</div><div class="pane-footer"><span>${items.length} ${items.length === 1 ? 'item' : 'items'}${pane.query ? ` · “${escape(pane.query)}” <button data-clear-search class="text-button">Wis zoekopdracht</button>` : ''}</span><span>${size(items.filter(i => !i.directory).reduce((n, i) => n + i.size, 0))}</span></div>`;
+  el.innerHTML = `${paneNav()}<div class="pane-toolbar"><button class="icon-button" data-up aria-label="Parent folder" ${!pane.path ? 'disabled' : ''}>${icons('arrow')}</button><div class="breadcrumbs">${crumbs}</div>${state.panes.length === 2 ? `<span class="pane-label">${index === 0 ? 'LEFT' : 'RIGHT'}</span>` : ''}</div><div class="table-wrap"><table><thead><tr><th><input type="checkbox" data-all aria-label="Select all" ${items.length && pane.selected.size === items.length ? 'checked' : ''}></th><th>${sortTitle('name', pane.query ? 'Search results' : 'Name')}</th><th>${sortTitle('modified', 'Modified')}</th><th>${sortTitle('size', 'Size')}</th><th></th></tr></thead><tbody>${items.map(item => `<tr data-item="${escape(item.path)}" class="${pane.selected.has(item.path) ? 'selected' : ''}"><td><input type="checkbox" data-select aria-label="Select ${escape(item.name)}" ${pane.selected.has(item.path) ? 'checked' : ''}></td><td><button class="file-name" data-open title="${escape(item.name)}"><span class="file-icon ${kind(item)}">${icons(kind(item))}</span><span>${escape(item.name)}${pane.query ? `<span class="file-path">${escape(parent(item.path) || 'Files')}</span>` : ''}</span></button></td><td class="file-meta" title="${escape(new Date(item.modified).toLocaleString('en-GB'))}">${date(item.modified)}</td><td class="file-meta">${item.size===null ? '—' : size(item.size)}</td><td><div class="row-actions">${canWrite()?`<button class="icon-button write" data-share aria-label="Share ${escape(item.name)}" title="Share">${originalIcon('link')}</button>`:''}<button class="icon-button" data-download aria-label="Download ${escape(item.name)}" title="Download">${originalIcon('download')}</button>${canWrite()?`<button class="icon-button write" data-trash aria-label="Delete ${escape(item.name)}" title="Delete">${originalIcon('trash')}</button>`:''}<button class="icon-button" data-menu aria-label="Actions for ${escape(item.name)}" title="Actions">${originalIcon('menu')}</button></div></td></tr>`).join('')}</tbody></table>${items.length ? '' : `<div class="empty">${originalIcon(pane.query ? 'find' : 'upload-cloud')}<strong>${pane.query ? 'No results' : 'Add files'}</strong><p>${pane.query ? 'Try another search term.' : 'This folder is empty.<br>Drop files here or create a folder.'}</p>${canWrite() && !pane.query ? '<button class="secondary" data-empty-upload>Upload files</button>' : ''}</div>`}</div><div class="pane-footer"><span>${items.length} ${items.length === 1 ? 'item' : 'items'}${pane.query ? ` · “${escape(pane.query)}” <button data-clear-search class="text-button">Clear search</button>` : ''}</span><span>${size(items.filter(i => !i.directory).reduce((n, i) => n + i.size, 0))}</span></div>`;
   if(pane.query&&pane.nextOffset!=null) {
-    const more=document.createElement('button');more.className='secondary search-more';more.textContent='Meer resultaten';el.querySelector('.table-wrap').append(more);
+    const more=document.createElement('button');more.className='secondary search-more';more.textContent='More results';el.querySelector('.table-wrap').append(more);
     on(more,'click',async()=>{
       const requestedPath=pane.path,requestedQuery=pane.query,offset=pane.nextOffset;
       const generation=pane.loadGeneration=(pane.loadGeneration||0)+1;pane.loadingMore=true;
@@ -365,7 +365,7 @@ function renderPane(index) {
       } finally {pane.loadingMore=false;more.disabled=false;}
     });
   }
-  if (clipboard && canWrite()) { const paste=document.createElement('button');paste.className='paste-floating';paste.textContent=clipboard.busy?'Plakken…':'Paste here';paste.disabled=!!clipboard.busy;el.append(paste);on(paste,'click',()=>pasteFiles(pane.path)); }
+  if (clipboard && canWrite()) { const paste=document.createElement('button');paste.className='paste-floating';paste.textContent=clipboard.busy?'Pasting…':'Paste here';paste.disabled=!!clipboard.busy;el.append(paste);on(paste,'click',()=>pasteFiles(pane.path)); }
   el.querySelectorAll('[data-tool]').forEach(button=>on(button,'click',async e=>{
     e.preventDefault();setActive(index);
     switch(button.dataset.tool){
@@ -378,7 +378,7 @@ function renderPane(index) {
       case 'preferences':await showPrefs();break;
       case 'logout':$('#logout').click();break;
       case 'search':el.querySelector('.classic-search').classList.toggle('expanded');el.querySelector('.classic-search input').focus();break;
-      case 'about':showDialog('Dirflux', '<p>Zelfstandig herbouwde versie · Dirflux 0.1.0-beta.7</p><p>Oorspronkelijk ontwerp en iconen: <a href="https://github.com/silverwind/droppy" target="_blank" rel="noopener">silverwind/droppy</a>.</p><p>Node.js · SQLite · CodeMirror 6</p>');break;
+      case 'about':showDialog('Dirflux', '<p>Independently rebuilt version · Dirflux 0.1.0-beta.8</p><p>Original design and icons: <a href="https://github.com/silverwind/droppy" target="_blank" rel="noopener">silverwind/droppy</a>.</p><p>Node.js · SQLite · CodeMirror 6</p>');break;
     }
   }));
   if(pane.query){el.querySelector('.classic-search').classList.add('expanded');el.querySelector('.classic-search input').value=pane.query;}
@@ -416,7 +416,7 @@ function renderPane(index) {
       const item=readInternalDrop(internal),destination=pane.path,operation=dropOperation(e,item.operation);
       const perform=async operation=>{const body=dropTransfer(item,destination,operation);if(body)await api('/transfer',{method:'POST',body});};
       if(operation){await perform(operation);await refreshAll();return;}
-      return formDialog('Verplaatsen, kopiëren of openen', '<label>Bewerking<select name="operation"><option value="move">Verplaatsen</option><option value="copy">Kopiëren</option><option value="open">Openen</option></select></label>', 'Toepassen',async form=>form.get('operation')==='open'?openDroppedItem(internal,index):perform(form.get('operation')),item.name+' → /'+destination);
+      return formDialog('Move, copy or open', '<label>Action<select name="operation"><option value="move">Move</option><option value="copy">Copy</option><option value="open">Open</option></select></label>', 'Apply',async form=>form.get('operation')==='open'?openDroppedItem(internal,index):perform(form.get('operation')),item.name+' → /'+destination);
     }
     const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
     const destination=pane.path;
@@ -435,9 +435,9 @@ function renderPane(index) {
 function showMenu(anchor, item, index) {
   $('.menu')?.remove();
   const menu = document.createElement('div'); menu.className = 'menu'; menu.setAttribute('role', 'menu');
-  const actions = [['open', item.directory ? 'Map openen' : 'Bekijken / bewerken'], ['download', item.directory ? 'Download als ZIP' : 'Downloaden']];
+  const actions = [['open', item.directory ? 'Open folder' : 'View / edit'], ['download', item.directory ? 'Download as ZIP' : 'Download']];
   if (!item.directory) actions.push(['edit','Edit']);
-  if (canWrite()) actions.push(['share','Share'],['rename','Rename'],['clipboard-copy','Copy'],['clipboard-cut','Cut'],['copy','Kopiëren naar…'],['move','Verplaatsen naar…'],['trash','Delete']);
+  if (canWrite()) actions.push(['share','Share'],['rename','Rename'],['clipboard-copy','Copy'],['clipboard-cut','Cut'],['copy','Copy to…'],['move','Move to…'],['trash','Delete']);
   menu.innerHTML = actions.map(([key, label]) => `<button role="menuitem" data-action="${key}" class="${key === 'trash' ? 'danger' : ''}">${label}</button>`).join('');
   document.body.append(menu);
   const rect = anchor.getBoundingClientRect(); menu.style.left = Math.max(8, Math.min(rect.right - 190, innerWidth - 205)) + 'px'; menu.style.top = Math.max(8, Math.min(rect.bottom + 5, innerHeight - menu.offsetHeight - 8)) + 'px';
@@ -453,9 +453,9 @@ async function action(actionName, item, index) {
   if (actionName === 'open') return item.directory ? navigate(index, item.path) : openFile(item, index);
   if (actionName === 'download') return download(item);
   if (actionName === 'share') return share(item);
-  if (actionName === 'rename') return formDialog('Naam wijzigen', `<label>Nieuwe naam<input name="name" value="${escape(item.name)}" required maxlength="255"></label>`, 'Naam wijzigen', async form => {
-    const name = form.get('name'); if (name.includes('/') || name.includes('\\')) throw new Error('Gebruik een naam zonder schuine strepen.');
-    await api('/transfer', { method:'POST', body:{ source:item.path, target:join(parent(item.path), name), operation:'move' } }); toast('Naam gewijzigd.');
+  if (actionName === 'rename') return formDialog('Rename', `<label>New name<input name="name" value="${escape(item.name)}" required maxlength="255"></label>`, 'Rename', async form => {
+    const name = form.get('name'); if (name.includes('/') || name.includes('\\')) throw new Error('Use a name without slashes.');
+    await api('/transfer', { method:'POST', body:{ source:item.path, target:join(parent(item.path), name), operation:'move' } }); toast('Renamed.');
   });
   if (actionName === 'trash') return trashItems([item]);
   if (['copy','move'].includes(actionName)) return transfer([item], actionName);
@@ -463,7 +463,7 @@ async function action(actionName, item, index) {
 async function transfer(items, operation) {
   const other = state.panes[state.active === 0 ? 1 : 0];
   let completed=0;
-  return formDialog(operation === 'copy' ? 'Bestanden kopiëren' : 'Bestanden verplaatsen', `<label>Doelmap<input name="destination" value="${escape(other?.path || '')}" placeholder="Leeg = hoofdmap"></label>`, operation === 'copy' ? 'Kopiëren' : 'Verplaatsen', async form => {
+  return formDialog(operation === 'copy' ? 'Copy files' : 'Move files', `<label>Destination folder<input name="destination" value="${escape(other?.path || '')}" placeholder="Leave empty for root folder"></label>`, operation === 'copy' ? 'Copy' : 'Move', async form => {
     const destination=form.get('destination').replace(/^\/+|\/+$/g, '');
     const destinationField=$('#modal-form [name="destination"]');
     try {
@@ -473,9 +473,9 @@ async function transfer(items, operation) {
         completed++;
         destinationField.readOnly=true;
       }
-    }catch(error){throw new Error(`${completed} van ${items.length} verwerkt. Opnieuw proberen verwerkt alleen de resterende bestanden. ${error.message}`);}
-    active().selected.clear(); toast(`${items.length} item(s) ${operation === 'copy' ? 'gekopieerd' : 'verplaatst'}.`);
-  }, `${items.length} item(s). Voer een bestaande map in, bijvoorbeeld Documenten/Archief. Bij een naamconflict wordt een vrije naam gekozen; beide items blijven bewaard.`);
+    }catch(error){throw new Error(`${completed} of ${items.length} processed. Retrying processes only the remaining files. ${error.message}`);}
+    active().selected.clear(); toast(`${items.length} item(s) ${operation === 'copy' ? 'copied' : 'moved'}.`);
+  }, `${items.length} item(s). Enter an existing folder, for example Documents/Archive. If a name already exists, a new name is chosen and both items are kept.`);
 }
 async function pasteFiles(destination) {
   if (!clipboard || !canWrite() || clipboard.busy) return;
@@ -514,7 +514,7 @@ function playAudio(item,index) {
   $('#shell').classList.add('has-audio');
   const player=$('#audio-player');
   const recovery=audioFailureRecovery(audioItems.length);let generation=0,stopped=false;
-  function start(){const track=audioItems[audioIndex],request=++generation;$('#audio-title').textContent=track.name;player.src='/api/file?path='+encodeURIComponent(track.path);player.play().catch(error=>{if(!stopped&&request===generation&&error.name==='NotAllowedError')toast('Druk op afspelen om de audio te starten.');});}
+  function start(){const track=audioItems[audioIndex],request=++generation;$('#audio-title').textContent=track.name;player.src='/api/file?path='+encodeURIComponent(track.path);player.play().catch(error=>{if(!stopped&&request===generation&&error.name==='NotAllowedError')toast('Press play to start the audio.');});}
   function next(delta){audioIndex=nextTrack(audioIndex,audioItems.length,delta,$('#audio-shuffle').classList.contains('toggle-active'));start();}
   $('#audio-prev').onclick=()=>next(-1);$('#audio-next').onclick=()=>next(1);$('#audio-shuffle').onclick=e=>{const enabled=e.currentTarget.classList.toggle('toggle-active');e.currentTarget.setAttribute('aria-pressed',String(enabled));};
   player.onended=()=>next(1);
@@ -522,24 +522,24 @@ function playAudio(item,index) {
   player.onerror=()=>{
     if(stopped||!player.error)return;
     const following=recovery.fail(audioIndex);
-    if(following===null){player.pause();toast('Geen van de nummers kan worden afgespeeld.',true);return;}
-    toast('Dit nummer kan niet worden afgespeeld. Het volgende wordt geprobeerd.',true);
+    if(following===null){player.pause();toast('None of these tracks can be played.',true);return;}
+    toast('This track cannot be played. Trying the next one.',true);
     audioIndex=following;start();
   };
   stopAudio=()=>{stopped=true;generation++;player.onended=player.onplaying=player.onerror=null;player.pause();player.removeAttribute('src');player.load();bar.remove();$('#shell').classList.remove('has-audio');audioItems=[];audioIndex=0;stopAudio=()=>{};};
   $('#audio-stop').onclick=()=>stopAudio();start();
 }
 async function trashItems(items) {
-  return formDialog('Naar de prullenbak', '', 'Verplaatsen naar prullenbak', async () => {
+  return formDialog('Move to trash', '', 'Move to trash', async () => {
     for (const item of items) await api('/trash', { method:'POST', body:{ path:item.path } });
-    active().selected.clear(); toast('Verplaatst. Je kunt de bestanden herstellen via de prullenbak.');
-  }, `${items.map(i => i.name).join(', ')}. Deze bestanden blijven beschikbaar in de prullenbak.`);
+    active().selected.clear(); toast('Moved to trash. You can restore the files from Trash.');
+  }, `${items.map(i => i.name).join(', ')}. These files will remain available in Trash.`);
 }
 async function create(directory) {
   const destination = active().path;
-  return formDialog(directory ? 'Nieuwe map' : 'Nieuw tekstbestand', `<label>Naam<input name="name" placeholder="${directory ? 'Naam van de map' : 'notities.txt'}" required maxlength="255"></label>`, 'Aanmaken', async form => {
-    const name = form.get('name'); if (name.includes('/') || name.includes('\\')) throw new Error('Gebruik een naam zonder schuine strepen.');
-    await api('/create', { method:'POST', body:{ path:join(destination,name), directory } }); toast(directory ? 'Map aangemaakt.' : 'Bestand aangemaakt.');
+  return formDialog(directory ? 'New folder' : 'New text file', `<label>Name<input name="name" placeholder="${directory ? 'Folder name' : 'notes.txt'}" required maxlength="255"></label>`, 'Create', async form => {
+    const name = form.get('name'); if (name.includes('/') || name.includes('\\')) throw new Error('Use a name without slashes.');
+    await api('/create', { method:'POST', body:{ path:join(destination,name), directory } }); toast(directory ? 'Folder created.' : 'File created.');
   });
 }
 function syncVideoControls() {
@@ -557,7 +557,7 @@ async function openFile(item, index, forceText=false) {
   if (!forceText && /\.pdf$/i.test(item.name)) return openPdf(item);
   if (!forceText && ['image','media'].includes(kind(item))) {
     const type = isImage(item) ? 'image' : 'video';
-    showDialog(item.name, `${type === 'image' ? `<div class="image-viewport" tabindex="0" aria-label="Afbeelding verschuiven"><img class="preview-image" src="${url}" alt="${escape(item.name)}" draggable="false"></div>` : `<${type} class="preview-${type}" src="${url}" controls></${type}>`}<div class="preview-controls"><button class="secondary" id="preview-prev">← Vorige</button><button class="secondary" id="preview-download">Download</button><button class="secondary" id="preview-zoom">Zoom</button><button class="secondary" id="fullscreen">Vergroten</button><button class="secondary" id="preview-next">Volgende →</button></div>`, 'preview-dialog');
+    showDialog(item.name, `${type === 'image' ? `<div class="image-viewport" tabindex="0" aria-label="Pan image"><img class="preview-image" src="${url}" alt="${escape(item.name)}" draggable="false"></div>` : `<${type} class="preview-${type}" src="${url}" controls></${type}>`}<div class="preview-controls"><button class="secondary" id="preview-prev">← Previous</button><button class="secondary" id="preview-download">Download</button><button class="secondary" id="preview-zoom">Zoom</button><button class="secondary" id="fullscreen">Expand</button><button class="secondary" id="preview-next">Next →</button></div>`, 'preview-dialog');
     const peers = state.panes[index].items.filter(i => type === 'video' ? isVideo(i) : kind(i) === 'image'); const at = peers.findIndex(i => i.path === item.path);
     $('#preview-prev').disabled = at <= 0; $('#preview-next').disabled = at >= peers.length - 1;
     on($('#preview-prev'), 'click', () => openFile(peers[at-1], index)); on($('#preview-next'), 'click', () => openFile(peers[at+1], index)); $('#preview-download').onclick = () => download(item);
@@ -574,20 +574,20 @@ async function openFile(item, index, forceText=false) {
       imageViewer=bindImageViewer($('.preview-image'),$('.image-viewport'),{
         initialMode:imageFitMode,
         change:({scale,mode})=>{status.textContent=Math.round(scale*100)+'%';imageFitMode=['width','height'].includes(mode)?mode:'fit';for(const key of ['fit','width','height'])$('#image-'+key).setAttribute('aria-pressed',String(mode===key));},
-        error:()=>toast('Je browser kan deze afbeelding niet weergeven.',true),
+        error:()=>toast('Your browser cannot display this image.',true),
       });
     } else $('#preview-zoom').hidden=true;
     if(type==='video') {
       const controls=$('.preview-controls');
-      for(const [setting,label] of [['loop','Video herhalen'],['autonext','Automatisch volgende video']]) {
+      for(const [setting,label] of [['loop','Loop video'],['autonext','Play next video automatically']]) {
         const button=document.createElement('button');button.className='secondary';button.id='video-'+setting;button.textContent=label;
         button.onclick=()=>{prefs[setting]=!prefs[setting];localStorage.setItem('droppy-next-prefs',JSON.stringify(prefs));syncVideoControls();};controls.append(button);
       }
       syncVideoControls();
       videoPlayback=bindVideoPlayback($('.preview-video'),{
         preferences:()=>prefs,next:()=>currentMedia?.next(),
-        error:()=>toast('Je browser kan deze video niet afspelen.',true),
-        playRejected:()=>toast('Druk op afspelen om de video te starten.'),
+        error:()=>toast('Your browser cannot play this video.',true),
+        playRejected:()=>toast('Press play to start the video.'),
       });
       if(!matchMedia('(pointer: coarse)').matches)videoPlayback.play();
     }
@@ -596,7 +596,7 @@ async function openFile(item, index, forceText=false) {
     if(viewerMode)window.parent.postMessage({type:'droppy-media-location',path:item.path},location.origin);
     return;
   }
-  showDialog(item.name,'<p id="text-loading" role="status">Tekst laden…</p>','editor-dialog');
+  showDialog(item.name,'<p id="text-loading" role="status">Loading text…</p>','editor-dialog');
   const loading=$('#text-loading'),controller=new AbortController();
   textReadController=controller;
   closeHook=()=>{controller.abort();return true;};
@@ -605,14 +605,14 @@ async function openFile(item, index, forceText=false) {
   catch (error) {
     if(controller.signal.aborted||!loading.isConnected)return;
     if(!state.user){await closeDialog();return;}
-    showDialog(item.name, `<p>${escape(error.message)}</p><p>Je kunt dit bestand downloaden en in de bijbehorende toepassing openen.</p><button class="primary" id="file-download">Downloaden</button>`);
+    showDialog(item.name, `<p>${escape(error.message)}</p><p>You can download this file and open it in its associated application.</p><button class="primary" id="file-download">Download</button>`);
     $('#file-download').onclick = () => download(item); return;
   } finally {
     if(textReadController===controller)textReadController=null;
   }
   if(controller.signal.aborted||!loading.isConnected)return;
   if(!state.user){await closeDialog();return;}
-  showDialog(item.name, `<div class="editor-toolbar"><button id="save" class="write">Save</button><button id="editor-download">DL</button><button id="wrap">Wrap</button><select id="syntax" aria-label="Syntax"></select><button id="editor-find">Find</button><button id="fullscreen">Full</button><span id="editor-status">UTF-8</span></div><div id="editor-host" class="editor-host" aria-label="Bestandsinhoud"></div>`, 'editor-dialog');
+  showDialog(item.name, `<div class="editor-toolbar"><button id="save" class="write">Save</button><button id="editor-download">DL</button><button id="wrap">Wrap</button><select id="syntax" aria-label="Syntax"></select><button id="editor-find">Find</button><button id="fullscreen">Full</button><span id="editor-status">UTF-8</span></div><div id="editor-host" class="editor-host" aria-label="File contents"></div>`, 'editor-dialog');
   const host=$('#editor-host'),saveButton=$('#save'),status=$('#editor-status');
   const extras=await import('/vendor/extras.js');
   if(!host.isConnected)return;
@@ -624,7 +624,7 @@ async function openFile(item, index, forceText=false) {
     write:(text,version)=>api('/text',{method:'POST',body:{path:item.path,text,version}}),
     isActive:()=>editorInstance===ownedEditor&&host.isConnected,canSave:canWrite,
     onBusy:busy=>{saveButton.disabled=busy||!canWrite();},
-    onSaved:async({dirty})=>{state.dirty=dirty;status.textContent=dirty?'Unsaved changes':'Saved · '+new Date().toLocaleTimeString('nl-NL');await refreshAll();}
+    onSaved:async({dirty})=>{state.dirty=dirty;status.textContent=dirty?'Unsaved changes':'Saved · '+new Date().toLocaleTimeString('en-GB');await refreshAll();}
   });
   $('#syntax').innerHTML=['Plain text',...extras.modes].map(mode=>`<option>${escape(mode)}</option>`).join('');$('#syntax').value=editorInstance.modeName;
   on($('#syntax'),'change',e=>editorInstance.mode(e.target.value));on($('#save'),'click',save);
@@ -635,14 +635,14 @@ async function openFile(item, index, forceText=false) {
   editorInstance.focus();
 }
 async function share(item) {
-  showDialog('Link delen', `<p>Deel <strong>${escape(item.name)}</strong> zonder account. Iedereen met de link krijgt toegang zolang je server bereikbaar is.</p><form id="share-form" class="dialog-form"><label>Bij openen van de link<select id="share-download" ${item.directory ? 'disabled' : ''}><option value="false">Openen in browser</option><option value="true">Direct downloaden</option></select></label><p class="share-hint">${item.directory ? 'Mappen worden altijd als ZIP gedownload.' : 'De browser opent ondersteunde bestanden. Andere bestandstypen worden gedownload; HTML en SVG worden veilig als tekst getoond.'}</p><label>Geldigheid<select id="share-hours"><option value="0">Geen vervaldatum</option><option value="24">24 uur</option><option value="168">7 dagen</option><option value="720">30 dagen</option></select></label><button class="primary" type="submit">Link maken</button></form><div id="share-result"></div>`);
+  showDialog('Share link', `<p>Share <strong>${escape(item.name)}</strong> without an account. Anyone with the link can access it while your server is reachable.</p><form id="share-form" class="dialog-form"><label>When opening the link<select id="share-download" ${item.directory ? 'disabled' : ''}><option value="false">Open in browser</option><option value="true">Download directly</option></select></label><p class="share-hint">${item.directory ? 'Folders are always downloaded as ZIP files.' : 'The browser opens supported files. Other formats are downloaded; HTML and SVG are safely displayed as text.'}</p><label>Expires after<select id="share-hours"><option value="0">No expiry</option><option value="24">24 hours</option><option value="168">7 days</option><option value="720">30 days</option></select></label><button class="primary" type="submit">Create link</button></form><div id="share-result"></div>`);
   $('#share-download').value = String(item.directory || prefs.sharelinkDownload !== false);
   on($('#share-form'), 'submit', async e => {
     e.preventDefault(); e.submitter.disabled = true;
     try {
       const result = await api('/shares', { method:'POST', body:{ path:item.path, hours:Number($('#share-hours').value), download:$('#share-download').value === 'true' } });
       $('#share-form').hidden = true;
-      $('#share-result').innerHTML = `<p>${result.download ? 'Direct downloaden' : 'Openen in browser'}</p><label>Deellink<input class="share-url" id="share-url" readonly></label><div class="dialog-actions"><button class="primary" id="copy-link">Kopieer link</button></div>`;
+      $('#share-result').innerHTML = `<p>${result.download ? 'Download directly' : 'Open in browser'}</p><label>Shared link<input class="share-url" id="share-url" readonly></label><div class="dialog-actions"><button class="primary" id="copy-link">Copy link</button></div>`;
       $('#share-url').value = location.origin + result.url;
       on($('#copy-link'), 'click', () => copyLink($('#share-url').value));
     } catch (error) { e.submitter.disabled = false; throw error; }
@@ -657,47 +657,47 @@ async function copyLink(url) {
   };
   // Local HTTP servers do not expose the secure-context Clipboard API.
   if (!navigator.clipboard?.writeText) {
-    if (legacyCopy()) return toast('Link gekopieerd.');
+    if (legacyCopy()) return toast('Link copied.');
   } else {
-    try { await navigator.clipboard.writeText(url); return toast('Link gekopieerd.'); }
-    catch { if (legacyCopy()) return toast('Link gekopieerd.'); }
+    try { await navigator.clipboard.writeText(url); return toast('Link copied.'); }
+    catch { if (legacyCopy()) return toast('Link copied.'); }
   }
-  toast('Kopiëren is geblokkeerd. De link is geselecteerd; gebruik Ctrl+C of ⌘C.');
+  toast('Copying is blocked. The link is selected; press Ctrl+C or ⌘C.');
 }
 async function showShares() {
   const { items } = await api('/shares');
-  showDialog('Gedeelde links', `<p>Links geven toegang zonder account. Je kunt ze op elk moment intrekken.</p><div class="detail-list">${items.length ? items.map(i => `<div class="detail-item"><div><strong>${escape(i.path)}</strong><small>${i.download === false ? 'Openen in browser' : 'Direct downloaden'} · ${!i.expires?'Geen vervaldatum':(i.expires > Date.now() ? 'Geldig tot ' : 'Verlopen op ')+date(i.expires)}</small><input class="share-url" value="${escape(location.origin + i.url)}" readonly aria-label="Deellink"></div><button data-revoke="${i.id}" class="danger">Intrekken</button></div>`).join('') : '<p>Je hebt nog geen deellinks gemaakt.</p>'}</div>`);
-  $$('[data-revoke]').forEach(b => on(b, 'click', async () => { await api('/shares/' + b.dataset.revoke, { method:'DELETE' }); await showShares(); toast('Link ingetrokken.'); }));
+  showDialog('Shared links', `<p>Links grant access without an account. You can revoke them at any time.</p><div class="detail-list">${items.length ? items.map(i => `<div class="detail-item"><div><strong>${escape(i.path)}</strong><small>${i.download === false ? 'Open in browser' : 'Download directly'} · ${!i.expires?'No expiry':(i.expires > Date.now() ? 'Valid until ' : 'Expired on ')+date(i.expires)}</small><input class="share-url" value="${escape(location.origin + i.url)}" readonly aria-label="Shared link"></div><button data-revoke="${i.id}" class="danger">Revoke</button></div>`).join('') : '<p>You have not created any shared links yet.</p>'}</div>`);
+  $$('[data-revoke]').forEach(b => on(b, 'click', async () => { await api('/shares/' + b.dataset.revoke, { method:'DELETE' }); await showShares(); toast('Link revoked.'); }));
 }
 async function showTrash() {
   const { items } = await api('/trash');
-  showDialog('Prullenbak', `<p>Herstel bestanden of verwijder ze definitief om schijfruimte vrij te maken.</p><div class="detail-list">${items.length ? items.map(i => `<div class="detail-item">${icons('trash')}<div><strong>${escape(i.path)}</strong><small>Verwijderd op ${date(i.deleted)}</small></div><button class="secondary write" data-restore="${i.id}">Herstellen</button><button class="danger write" data-purge="${i.id}">Definitief verwijderen</button></div>`).join('') : '<p>De prullenbak is leeg.</p>'}</div>`);
-  $$('[data-restore]').forEach(b => on(b, 'click', async () => { await api('/restore', { method:'POST', body:{ id:b.dataset.restore } }); await showTrash(); await refreshAll(); toast('Bestand hersteld.'); }));
+  showDialog('Trash', `<p>Restore files or delete them permanently to free disk space.</p><div class="detail-list">${items.length ? items.map(i => `<div class="detail-item">${icons('trash')}<div><strong>${escape(i.path)}</strong><small>Deleted on ${date(i.deleted)}</small></div><button class="secondary write" data-restore="${i.id}">Restore</button><button class="danger write" data-purge="${i.id}">Delete permanently</button></div>`).join('') : '<p>The trash is empty.</p>'}</div>`);
+  $$('[data-restore]').forEach(b => on(b, 'click', async () => { await api('/restore', { method:'POST', body:{ id:b.dataset.restore } }); await showTrash(); await refreshAll(); toast('File restored.'); }));
   $$('[data-purge]').forEach(b => on(b,'click',() => {
     const item=items.find(i=>i.id===b.dataset.purge);
-    return formDialog('Definitief verwijderen','', 'Definitief verwijderen',async()=>{
-      await api('/trash/'+item.id,{method:'DELETE'});toast('Definitief verwijderd.');
-    },`${item.path} wordt permanent verwijderd. Dit kan niet ongedaan worden gemaakt.`);
+    return formDialog('Delete permanently','', 'Delete permanently',async()=>{
+      await api('/trash/'+item.id,{method:'DELETE'});toast('Permanently deleted.');
+    },`${item.path} will be permanently deleted. This cannot be undone.`);
   }));
 }
 async function showUsers() {
   const { items } = await api('/users');
-  const roles = { admin:'Beheerder', editor:'Bewerken', viewer:'Alleen lezen' };
-  showDialog('Gebruikers', `<p>Alle gebruikers zien dezelfde bestandenmap. Lezers kunnen alleen bekijken en downloaden.</p><div class="detail-list">${items.map(i => `<div class="detail-item">${icons('user')}<div><strong>${escape(i.name)}</strong><small>${roles[i.role]}</small></div>${i.id !== state.user.id ? `<button data-edit-user="${i.id}" class="secondary">Wijzigen</button><button data-delete-user="${i.id}" class="danger">Verwijderen</button>` : '<small>Jij</small>'}</div>`).join('')}</div><div class="dialog-actions"><button id="add-user" class="primary">Gebruiker toevoegen</button></div>`);
+  const roles = { admin:'Administrator', editor:'Editor', viewer:'Read only' };
+  showDialog('Users', `<p>All users share the same files folder. Viewers can only view and download files.</p><div class="detail-list">${items.map(i => `<div class="detail-item">${icons('user')}<div><strong>${escape(i.name)}</strong><small>${roles[i.role]}</small></div>${i.id !== state.user.id ? `<button data-edit-user="${i.id}" class="secondary">Edit</button><button data-delete-user="${i.id}" class="danger">Delete</button>` : '<small>You</small>'}</div>`).join('')}</div><div class="dialog-actions"><button id="add-user" class="primary">Add user</button></div>`);
   $$('[data-edit-user]').forEach(button => on(button,'click',() => {
     const user=items.find(i=>i.id===button.dataset.editUser);
-    return formDialog('Gebruiker wijzigen', `<label>Rol<select name="role">${Object.entries(roles).map(([value,label])=>`<option value="${value}" ${user.role===value?'selected':''}>${label}</option>`).join('')}</select></label><label>Nieuw wachtwoord (optioneel)<input name="password" type="password" minlength="12" maxlength="1024" autocomplete="new-password" placeholder="Leeg laten om te behouden"></label>`, 'Opslaan',async form=>{
+    return formDialog('Edit user', `<label>Role<select name="role">${Object.entries(roles).map(([value,label])=>`<option value="${value}" ${user.role===value?'selected':''}>${label}</option>`).join('')}</select></label><label>New password (optional)<input name="password" type="password" minlength="12" maxlength="1024" autocomplete="new-password" placeholder="Leave empty to keep current password"></label>`, 'Save',async form=>{
       const body={role:form.get('role')};if(form.get('password'))body.password=form.get('password');
-      await api('/users/'+user.id,{method:'PUT',body});toast('Gebruiker bijgewerkt.');
-    },`${user.name}: een gewijzigde rol of een nieuw wachtwoord meldt deze gebruiker op alle apparaten af. Bestaande deellinks blijven geldig totdat je ze intrekt.`);
+      await api('/users/'+user.id,{method:'PUT',body});toast('User updated.');
+    },`${user.name}: changing the role or password signs this user out on all devices. Existing shared links remain valid until revoked.`);
   }));
   $$('[data-delete-user]').forEach(b => on(b, 'click', async () => {
     const user = items.find(i => i.id === b.dataset.deleteUser);
-    await formDialog('Gebruiker verwijderen', '', 'Gebruiker verwijderen', async () => {
-      await api('/users/' + user.id, { method:'DELETE' }); toast('Gebruiker verwijderd.');
-    }, `${user.name} verliest toegang. De sessies en downloadlinks van deze gebruiker worden ingetrokken. Bestanden blijven behouden.`);
+    await formDialog('Delete user', '', 'Delete user', async () => {
+      await api('/users/' + user.id, { method:'DELETE' }); toast('User deleted.');
+    }, `${user.name} loses access. Their sessions and shared links will be revoked. Files are preserved.`);
   }));
-  on($('#add-user'), 'click', () => formDialog('Gebruiker toevoegen', '<label>Gebruikersnaam<input name="name" required maxlength="64" autocomplete="off"></label><label>Wachtwoord<input name="password" type="password" required minlength="12" maxlength="1024" autocomplete="new-password"></label><label>Rol<select name="role"><option value="editor">Bewerken</option><option value="viewer">Alleen lezen</option><option value="admin">Beheerder</option></select></label>', 'Gebruiker toevoegen', async form => { await api('/users', { method:'POST', body:Object.fromEntries(form) }); toast('Gebruiker toegevoegd.'); }));
+  on($('#add-user'), 'click', () => formDialog('Add user', '<label>Username<input name="name" required maxlength="64" autocomplete="off"></label><label>Password<input name="password" type="password" required minlength="12" maxlength="1024" autocomplete="new-password"></label><label>Role<select name="role"><option value="editor">Editor</option><option value="viewer">Read only</option><option value="admin">Administrator</option></select></label>', 'Add user', async form => { await api('/users', { method:'POST', body:Object.fromEntries(form) }); toast('User added.'); }));
 }
 function chooseUploadConflict(name, directory, job) {
   const result=uploadConflictQueue.then(async()=>{
@@ -705,7 +705,7 @@ function chooseUploadConflict(name, directory, job) {
     while(dialog.open)await new Promise(resolve=>dialog.addEventListener('close',resolve,{once:true}));
     if(job.cancelled)return 'skip';
     return new Promise(resolve => {
-    showDialog('Deze naam bestaat al', `<p>${escape(name)}</p><p>${directory ? 'Er bestaat al een map met deze naam.' : 'Wil je het bestaande bestand vervangen of beide versies bewaren?'}</p><div class="dialog-actions"><button data-conflict="skip" class="secondary">Overslaan</button><button data-conflict="rename" class="primary">Beide bewaren</button>${directory ? '' : '<button data-conflict="replace" class="danger">Vervangen</button>'}</div>`);
+    showDialog('This name already exists', `<p>${escape(name)}</p><p>${directory ? 'A folder with this name already exists.' : 'Replace the existing file or keep both versions?'}</p><div class="dialog-actions"><button data-conflict="skip" class="secondary">Skip</button><button data-conflict="rename" class="primary">Keep both</button>${directory ? '' : '<button data-conflict="replace" class="danger">Replace</button>'}</div>`);
     let choice='skip';
     job.closeConflict=()=>closeDialog();
     dialog.addEventListener('close', () => {job.closeConflict=null;resolve(choice);}, {once:true});
@@ -721,10 +721,10 @@ function chooseUploadConflict(name, directory, job) {
 async function upload(files, destination) {
   if (!files.length || !canWrite()) return;
   const job={cancelled:false,xhr:null,closeConflict:null};
-  const card=document.createElement('article');card.className='upload-job';card.setAttribute('aria-label','Upload naar /'+destination);
-  card.innerHTML='<div><strong></strong><button class="text-button">Annuleren</button></div><small class="upload-destination"></small><progress max="100" value="0"></progress><small class="upload-detail"></small>';
+  const card=document.createElement('article');card.className='upload-job';card.setAttribute('aria-label','Upload to /'+destination);
+  card.innerHTML='<div><strong></strong><button class="text-button">Cancel</button></div><small class="upload-destination"></small><progress max="100" value="0"></progress><small class="upload-detail"></small>';
   const title=card.querySelector('strong'),detail=card.querySelector('.upload-detail'),progress=card.querySelector('progress'),cancel=card.querySelector('button');
-  card.querySelector('.upload-destination').textContent='Naar /'+destination;
+  card.querySelector('.upload-destination').textContent='To /'+destination;
   job.cancel=()=>{job.cancelled=true;job.xhr?.abort();job.closeConflict?.();cancel.disabled=true;};
   cancel.onclick=job.cancel;
   uploadJobs.add(job);state.uploading=true;$('#uploads').append(card);$('#uploads').hidden=false;
@@ -732,13 +732,13 @@ async function upload(files, destination) {
   try {
   for (let i = 0; i < files.length && !job.cancelled; i++) {
     const { file, path, directory } = files[i];
-    title.textContent = `Upload ${i+1} van ${files.length}`; detail.textContent = path; progress.value = 0;
+    title.textContent = `Upload ${i+1} of ${files.length}`; detail.textContent = path; progress.value = 0;
     try {
       const target = join(destination,path);
       const existing = await api('/upload-target?path=' + encodeURIComponent(target));
       if(job.cancelled)break;
       if(directory) {
-        if(existing.exists&&!existing.directory)throw new Error('Een bestand blokkeert deze map. Hernoem het bestand of de uploadmap.');
+        if(existing.exists&&!existing.directory)throw new Error('A file blocks this folder. Rename the file or the upload folder.');
         if(!existing.exists)await api('/create',{method:'POST',body:{path:target,directory:true}});
         completed++;continue;
       }
@@ -749,21 +749,21 @@ async function upload(files, destination) {
       await new Promise((resolve, reject) => {
         const xhr = job.xhr = new XMLHttpRequest(); xhr.open('PUT', '/api/upload?' + query); xhr.setRequestHeader('X-CSRF-Token', state.csrf); xhr.setRequestHeader('Content-Type', 'application/octet-stream');
         xhr.upload.onprogress = e => { if (e.lengthComputable) progress.value = e.loaded / e.total * 100; };
-        xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(); else { let message = 'Upload mislukt.'; try { message = JSON.parse(xhr.responseText).error; } catch {} reject(new Error(message)); } };
-        xhr.onerror = () => reject(new Error('Verbinding verbroken.')); xhr.onabort = () => reject(new Error('Geannuleerd.')); xhr.send(file);
+        xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(); else { let message = 'Upload failed.'; try { message = JSON.parse(xhr.responseText).error; } catch {} reject(new Error(message)); } };
+        xhr.onerror = () => reject(new Error('Connection lost.')); xhr.onabort = () => reject(new Error('Cancelled.')); xhr.send(file);
       }); completed++;
     } catch (error) { if(!job.cancelled)errors.push(path + ': ' + error.message); }
   }
   } finally {
     uploadJobs.delete(job);state.uploading=uploadJobs.size>0;job.xhr=null;
     if(errors.length) {
-      title.textContent='Upload deels mislukt';detail.textContent=errors.join('\n');cancel.disabled=false;cancel.textContent='Sluiten';
+      title.textContent='Upload partially failed';detail.textContent=errors.join('\n');cancel.disabled=false;cancel.textContent='Close';
       cancel.onclick=()=>{card.remove();$('#uploads').hidden=!$('#uploads').childElementCount;};
     } else card.remove();
     $('#uploads').hidden=!$('#uploads').childElementCount;
   }
   await refreshAll();
-  toast(`${completed} van ${files.length} bestand(en)/map(pen) verwerkt.${job.cancelled ? ' Upload geannuleerd.' : ''}`, errors.length > 0);
+  toast(`${completed} of ${files.length} files/folders processed.${job.cancelled ? ' Upload cancelled.' : ''}`, errors.length > 0);
 }
 function startLiveEvents() {
   if(!viewerMode&&state.user&&!eventSource){eventSource=new EventSource('/api/events');eventSource.addEventListener('change',()=>{if(!$('#dialog').open&&!state.uploading)refreshAll(true);});}
@@ -779,26 +779,26 @@ async function init() {
     if(!$('.auth-bottom')) {const bottom=document.createElement('div');bottom.className='auth-bottom';bottom.innerHTML='<input type="checkbox" id="remember-me" checked aria-label="Remember Me"><span>Remember Me</span>';$('#login-form').append(bottom);}
     if(!$('#setup-code-label')) {
       const label=document.createElement('label');label.id='setup-code-label';
-      label.innerHTML='Installatiecode<input id="setup-code" type="password" autocomplete="off" placeholder="Code uit CONFIG_DIR/setup-token"><small>Lees het bestand setup-token in je configuratiemap.</small>';
+      label.innerHTML='Setup code<input id="setup-code" type="password" autocomplete="off" placeholder="Code from CONFIG_DIR/setup-token"><small>Read the setup-token file in your configuration directory.</small>';
       $('#login-button').before(label);
     }
     $('#setup-code-label').hidden=!state.setup;$('#setup-code').required=!!state.setup;
     $('#username').placeholder='Username';$('#password').placeholder='Password';
-    $('#auth-title').textContent = state.setup ? 'Maak het jouw plek' : 'Welkom terug';
-    $('#auth-description').textContent = state.setup ? 'Maak je eerste beheerdersaccount aan om te beginnen.' : 'Log in om je bestanden te openen.';
+    $('#auth-title').textContent = state.setup ? 'Set up your workspace' : 'Welcome back';
+    $('#auth-description').textContent = state.setup ? 'Create your first administrator account to get started.' : 'Sign in to access your files.';
     $('#login-button').innerHTML = `${state.setup ? 'Create account' : 'Sign in'} <span>→</span>`;
     $('#password').minLength = state.setup ? 12 : 1; $('#password').autocomplete = state.setup ? 'new-password' : 'current-password';
-    $('#auth-footnote').textContent = state.setup ? 'Gebruik een wachtwoord van minstens 12 tekens.' : 'Alleen toegankelijk met jouw account.';
+    $('#auth-footnote').textContent = state.setup ? 'Use a password with at least 12 characters.' : 'Accessible only with your account.';
     return;
   }
   $('#account-name').textContent = state.user.name; $('#avatar').textContent = state.user.name[0].toUpperCase();
   $('#account-settings').hidden=!!state.user.guest;
-  $('#account-role').textContent = { admin:'Beheerder', editor:'Bewerken', viewer:'Alleen lezen' }[state.user.role];
+  $('#account-role').textContent = { admin:'Administrator', editor:'Editor', viewer:'Read only' }[state.user.role];
   $('#nav-users').hidden = state.user.role !== 'admin';
   if(!viewerMode&&location.hash)await restoreLocation();
   if(viewerMode)state.panes[0].path=parent(viewParameters.get('path')||'');
   renderPanes(); await refreshAll();
-  if(viewerMode){const item=state.panes[0].items.find(i=>i.path===viewParameters.get('path'));if(item)await openFile(item,0,viewParameters.get('edit')==='1');else showDialog('Not found','<p>Dit bestand bestaat niet meer.</p>');}
+  if(viewerMode){const item=state.panes[0].items.find(i=>i.path===viewParameters.get('path'));if(item)await openFile(item,0,viewParameters.get('edit')==='1');else showDialog('Not found','<p>This file no longer exists.</p>');}
   startLiveEvents();
 }
 on($('#login-form'), 'submit', async e => {
@@ -834,9 +834,9 @@ $$('[data-batch]').forEach(button => on(button, 'click', async () => {
 }));
 on($('#nav-files'), 'click', () => navigate(state.active, ''));
 on($('#nav-shares'), 'click', showShares); on($('#nav-trash'), 'click', showTrash); on($('#nav-users'), 'click', showUsers);
-on($('#account-settings'), 'click', () => formDialog('Wachtwoord wijzigen', '<label>Huidig wachtwoord<input name="currentPassword" type="password" required autocomplete="current-password"></label><label>Nieuw wachtwoord<input name="password" type="password" required minlength="12" maxlength="1024" autocomplete="new-password"></label>', 'Wachtwoord wijzigen', async form => {
-  const session = await api('/password', { method:'POST', body:Object.fromEntries(form) }); Object.assign(state, session); toast('Wachtwoord gewijzigd. Andere sessies zijn afgemeld.');
-}, `Account: ${state.user.name}. Je andere sessies worden afgemeld na het wijzigen.`));
+on($('#account-settings'), 'click', () => formDialog('Change password', '<label>Current password<input name="currentPassword" type="password" required autocomplete="current-password"></label><label>New password<input name="password" type="password" required minlength="12" maxlength="1024" autocomplete="new-password"></label>', 'Change password', async form => {
+  const session = await api('/password', { method:'POST', body:Object.fromEntries(form) }); Object.assign(state, session); toast('Password changed. Other sessions have been signed out.');
+}, `Account: ${state.user.name}. Your other sessions will be signed out after this change.`));
 $('#dialog-close').onclick = closeDialog;
 $('#dialog').addEventListener('cancel', e => { e.preventDefault(); closeDialog(); });
 document.addEventListener('click', e => { if (!e.target.closest('.menu')) $('.menu')?.remove(); });
@@ -872,10 +872,10 @@ on(document, 'paste', async e => {
   if (e.defaultPrevented || !state.user || !canWrite() || e.target.closest('input,textarea,select,[contenteditable]') || $('#dialog').open) return;
   if(clipboard){e.preventDefault();return pasteFiles(active().path);}
   const files = [...e.clipboardData.files];
-  if (files.length) { e.preventDefault(); await upload(files.map(file => ({ file, path:`geplakt-${Date.now()}-${file.name}` })), active().path); }
+  if (files.length) { e.preventDefault(); await upload(files.map(file => ({ file, path:`pasted-${Date.now()}-${file.name}` })), active().path); }
   else {
     const text = e.clipboardData.getData('text/plain');
-    if (text) await formDialog('Tekst opslaan als bestand', '<label>Bestandsnaam<input name="name" value="geplakte-tekst.txt" required></label>', 'Opslaan', async form => { const file = new File([text], form.get('name'), { type:'text/plain' }); await upload([{ file, path:file.name }], active().path); });
+    if (text) await formDialog('Save text as a file', '<label>Filename<input name="name" value="pasted-text.txt" required></label>', 'Save', async form => { const file = new File([text], form.get('name'), { type:'text/plain' }); await upload([{ file, path:file.name }], active().path); });
   }
 });
 if(viewerMode){
@@ -912,5 +912,5 @@ setInterval(() => { if (!viewerMode && state.user && !document.hidden && !$('#di
 window.addEventListener('popstate',()=>restoreLocation(true).catch(e=>toast(e.message,true)));
 init().catch(error => {
   $('#auth').hidden=false;$('#shell').hidden=true;$('#auth-error').textContent=error.message;
-  const link=document.createElement('a');link.href='/?login=1';link.className='secondary';link.textContent='Aanmelden of server instellen';$('#auth-error').after(link);
+  const link=document.createElement('a');link.href='/?login=1';link.className='secondary';link.textContent='Sign in or set up the server';$('#auth-error').after(link);
 });

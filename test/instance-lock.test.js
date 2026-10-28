@@ -24,7 +24,7 @@ test('failed startup releases its instance lock and startup resources', async t 
   let instance;
   t.after(async () => { instance?.close(); assert.equal(path.dirname(temp), os.tmpdir()); await fs.rm(temp, { recursive: true, force: true }); });
   await fs.mkdir(options.config); await fs.writeFile(path.join(options.config, 'setup-token'), 'invalid');
-  await assert.rejects(createApp(options), /Ongeldig setup-tokenbestand/);
+  await assert.rejects(createApp(options), /Invalid setup token file/);
   await fs.writeFile(path.join(options.config, 'setup-token'), 'valid-test-setup-token-with-at-least-32-characters');
   instance = await createApp(options);
   assert.equal(instance.setupTokenRequired, true);
