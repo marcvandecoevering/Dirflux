@@ -19,3 +19,4 @@ body{background:#181818;position:fixed;inset:0;overflow:hidden}.shell{height:100
 .preview-controls [aria-pressed=true]{background:#4a4a4a;color:white}
 .preview-controls .secondary{max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere}
 #image-scale{align-self:center;min-width:4em;text-align:center;font-size:13px}
+.share-hint,#share-result>p{font-size:14px;line-height:1.5;margin:0;color:#666}
