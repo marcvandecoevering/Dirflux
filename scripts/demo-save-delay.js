@@ -1,12 +1,14 @@
 // Manual browser harness. Only proxies the disposable scripts/demo.js instance.
 // Run alongside that demo, then browse http://127.0.0.1:18098/.
+// Pass --read to delay the first text read instead of the first save.
 import http from 'node:http';
 
+const readMode=process.argv.includes('--read'),label=readMode?'READ':'SAVE';
 let saves=0;
 const server=http.createServer((req,res)=>{
-  const save=req.method==='POST'&&req.url==='/api/text';
+  const save=readMode?req.method==='GET'&&req.url.startsWith('/api/text?'):req.method==='POST'&&req.url==='/api/text';
   const number=save?++saves:0;
-  if(save)console.log(`SAVE_REQUEST ${number}`);
+  if(save)console.log(`${label}_REQUEST ${number}`);
   const upstream=http.request({hostname:'127.0.0.1',port:18094,path:req.url,method:req.method,headers:req.headers},response=>{
     if(number!==1){res.writeHead(response.statusCode,response.headers);response.pipe(res);return;}
     const chunks=[];let size=0;
@@ -16,11 +18,11 @@ const server=http.createServer((req,res)=>{
       chunks.push(chunk);
     });
     response.on('end',()=>{
-      console.log(`SAVE_RESPONSE_HELD ${response.statusCode}`);
+      console.log(`${label}_RESPONSE_HELD ${response.statusCode}`);
       const timer=setTimeout(()=>{
-        if(!res.destroyed){res.writeHead(response.statusCode,response.headers);res.end(Buffer.concat(chunks));console.log('SAVE_RESPONSE_DELIVERED');}
+        if(!res.destroyed){res.writeHead(response.statusCode,response.headers);res.end(Buffer.concat(chunks));console.log(`${label}_RESPONSE_DELIVERED`);}
       },30000);
-      res.once('close',()=>clearTimeout(timer));
+      res.once('close',()=>{clearTimeout(timer);if(!res.writableEnded)console.log(`${label}_RESPONSE_CANCELLED`);});
     });
     response.on('error',()=>res.destroy());
   });

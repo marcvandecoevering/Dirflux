@@ -31,7 +31,7 @@ const uploadJobs = new Set();
 let uploadConflictQueue = Promise.resolve();
 let nativeFullscreenPane = null;
 let videoPlayback = null, imageViewer = null, imageFitMode = 'fit';
-let editorInstance = null, currentMedia = null, clipboard = null, audioItems = [], audioIndex = 0, eventSource = null;
+let editorInstance = null, currentMedia = null, clipboard = null, audioItems = [], audioIndex = 0, eventSource = null, textReadController = null;
 let suspendedWorkspaceOwner=null;
 let stopAudio = () => {};
 const defaultPrefs = { theme:'droppy',editorFontSize:16,indentWithTabs:false,indentUnit:4,lineWrapping:false,loop:true,autonext:false,sharelinkDownload:true };
@@ -193,6 +193,7 @@ async function confirmCloseFrames() {
   return true;
 }
 function showDialog(title, html, className = '') {
+  textReadController?.abort();textReadController=null;
   videoPlayback?.destroy(); videoPlayback=null; imageViewer?.destroy(); imageViewer=null;
   editorInstance?.destroy(); editorInstance=null; currentMedia=null;
   $('#dialog-title').textContent = title; $('#dialog-content').innerHTML = html; $('#dialog').className = className;
@@ -595,12 +596,22 @@ async function openFile(item, index, forceText=false) {
     if(viewerMode)window.parent.postMessage({type:'droppy-media-location',path:item.path},location.origin);
     return;
   }
+  showDialog(item.name,'<p id="text-loading" role="status">Tekst laden…</p>','editor-dialog');
+  const loading=$('#text-loading'),controller=new AbortController();
+  textReadController=controller;
+  closeHook=()=>{controller.abort();return true;};
   let data;
-  try { data = await api('/text?path=' + encodeURIComponent(item.path)); }
+  try { data = await api('/text?path=' + encodeURIComponent(item.path),{signal:controller.signal}); }
   catch (error) {
+    if(controller.signal.aborted||!loading.isConnected)return;
+    if(!state.user){await closeDialog();return;}
     showDialog(item.name, `<p>${escape(error.message)}</p><p>Je kunt dit bestand downloaden en in de bijbehorende toepassing openen.</p><button class="primary" id="file-download">Downloaden</button>`);
     $('#file-download').onclick = () => download(item); return;
+  } finally {
+    if(textReadController===controller)textReadController=null;
   }
+  if(controller.signal.aborted||!loading.isConnected)return;
+  if(!state.user){await closeDialog();return;}
   showDialog(item.name, `<div class="editor-toolbar"><button id="save" class="write">Save</button><button id="editor-download">DL</button><button id="wrap">Wrap</button><select id="syntax" aria-label="Syntax"></select><button id="editor-find">Find</button><button id="fullscreen">Full</button><span id="editor-status">UTF-8</span></div><div id="editor-host" class="editor-host" aria-label="Bestandsinhoud"></div>`, 'editor-dialog');
   const host=$('#editor-host'),saveButton=$('#save'),status=$('#editor-status');
   const extras=await import('/vendor/extras.js');
