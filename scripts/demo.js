@@ -12,6 +12,7 @@ await fs.writeFile(path.join(instance.root,'Welkom.txt'), 'Welkom bij Droppy Nex
 await fs.writeFile(path.join(instance.root,'Documenten','Notities.txt'), 'Mijn notities\n\nEen nieuwe plek voor bestanden.\n');
 await fs.writeFile(path.join(instance.root,'Projecten','instellingen.json'), JSON.stringify({ project:'Droppy Next', status:'demo' },null,2));
 await fs.writeFile(path.join(instance.root,'Documenten','Voorbeeld.pdf'),samplePdf());
+await fs.copyFile(path.resolve(import.meta.dirname,'../test/fixtures/pdf/jpeg2000.pdf'),path.join(instance.root,'Documenten','JPEG2000.pdf'));
 await fs.writeFile(path.join(instance.root,'Geluidstest.wav'),sampleWav());
 await fs.writeFile(path.join(instance.root,'Geluidstest-2.wav'),sampleWav());
 for(const [source,name] of [['blue.mp4','Video-1.mp4'],['green.mp4','Video-2.mp4']]) {

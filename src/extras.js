@@ -36,7 +36,7 @@ export async function editor(parent, text, filename, prefs, readOnly, onChange, 
 }
 export async function pdf(url, canvas, onInfo) {
   pdfjs.GlobalWorkerOptions.workerSrc='/vendor/pdf.worker.min.mjs';
-  const loading=pdfjs.getDocument({url,isEvalSupported:false,useWasm:false,cMapUrl:'/vendor/cmaps/',cMapPacked:true,standardFontDataUrl:'/vendor/standard_fonts/'});
+  const loading=pdfjs.getDocument({url,isEvalSupported:false,useWasm:false,wasmUrl:'/vendor/wasm/',iccUrl:'/vendor/iccs/',cMapUrl:'/vendor/cmaps/',cMapPacked:true,standardFontDataUrl:'/vendor/standard_fonts/'});
   const document=await loading.promise;
   let page=1,scale=1.3,renderTask=null;
   async function render() {

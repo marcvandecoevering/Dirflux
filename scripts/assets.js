@@ -10,7 +10,7 @@ await fs.mkdir(generated,{recursive:true});
 const result = await build({entryPoints:[path.join(root,'src/extras.js')],bundle:true,format:'esm',minify:true,splitting:true,outdir:path.join(root,'public/vendor'),target:['es2022'],legalComments:'linked',metafile:true});
 const pdfRoot = path.join(root,'node_modules/pdfjs-dist');
 await fs.copyFile(path.join(pdfRoot,'build/pdf.worker.min.mjs'),path.join(root,'public/vendor/pdf.worker.min.mjs'));
-for (const folder of ['cmaps','standard_fonts']) await fs.cp(path.join(pdfRoot,folder),path.join(root,'public/vendor',folder),{recursive:true});
+for (const folder of ['cmaps','standard_fonts','wasm','iccs']) await fs.cp(path.join(pdfRoot,folder),path.join(root,'public/vendor',folder),{recursive:true});
 await fs.copyFile(path.join(root,'node_modules/@fontsource/roboto/files/roboto-latin-300-normal.woff2'),path.join(root,'public/original/roboto-latin-300.woff2'));
 await fs.writeFile(path.join(root,'public/original/fonts.css'),'@font-face{font-family:Roboto;font-style:normal;font-weight:300;font-display:swap;src:url("roboto-latin-300.woff2") format("woff2")}');
 const packages=new Set(['pdfjs-dist','@fontsource/roboto']);
