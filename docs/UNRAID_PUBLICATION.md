@@ -2,9 +2,16 @@
 
 Status (2026-10-28): beta release and public multiarchitecture image verified;
 installed and tested on Unraid 7.3.3. Not submitted or listed in Apps.
-The remaining portal step is authenticated **Validate and Scan**, followed by
-addressing any findings and submitting for review. Generated files are beta
-metadata, not approval evidence.
+Authenticated **Validate and Scan** passed on 2026-10-28 for repository revision
+`3f3571c`. The portal is at the final confirmation; **Submit for Review** has not
+been clicked. Validation is not listing approval.
+
+Portal results: public and active repository, BSD-2-Clause license, one valid
+Docker application, no hard errors, no template warnings, profile extracted,
+custom icon, no starter placeholders, and the Docker image is pullable.
+The portal also notes an existing ThuisWeb repository on this account and
+prefers one template repository per account. This advisory does not block the
+separate Dirflux submission; no existing repository was changed.
 
 ## Submission details
 
@@ -70,11 +77,8 @@ use HTTPS and enable secure cookies for remote access.
 
 ## Remaining portal work
 
-- Sign in at the submission portal with the maintainer's Unraid.net account
-  (this is separate from the Unraid server login), and add the repository above.
-- Run [Validate and Scan](https://ca.unraid.net/submit) on the public repository;
-  address findings before submission. Repository metadata parsing and a local
-  container test do not replace this review or prove acceptance into Apps.
+- Re-run [Validate and Scan](https://ca.unraid.net/submit) if application templates
+  or repository metadata change. The current template and profile passed.
 - Review the final application and submit it when ready. Listing depends on
   Community Applications approval; do not advertise availability in Apps yet.
 
