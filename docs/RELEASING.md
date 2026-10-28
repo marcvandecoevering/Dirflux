@@ -1,5 +1,11 @@
 # Maintainer releases
 
+## Completing user-facing fixes
+
+A pushed source commit alone does not deliver a fix to container users. For changes intended for users, complete the release: increment the version, tag the exact revision, run the release workflow with `create_draft`, `publish_images` and `update_beta`, verify the resulting artifacts, and publish the GitHub prerelease. Keep the native download, versioned AMD64/ARM64 images and `beta` channel on the same verified revision. Never replace an existing version tag or bypass failed checks.
+
+The central Unraid template and compatibility copy use `ghcr.io/marcvandecoevering/dirflux:beta`; update both if installation settings change. Confirm the public image and release are available before reporting the fix as shipped. An already running container still needs Unraid's normal image update and recreation; publishing a new image does not change a running process.
+
 ## Maintainer release candidates
 
 The manually dispatched `Release candidate` workflow requires an existing version tag matching `package.json`. It resolves that tag to a commit, runs the reusable CI against that exact revision and builds a checksummed native archive. By default it only retains the candidate as a workflow artifact for 30 days.
