@@ -24,7 +24,7 @@ function request(route,{method='GET',body,headers={}}={}) {
   });
 }
 try {
-  app=await createApp({files:path.join(temp,'files'),config:path.join(temp,'config'),secureCookie:true,publicMode:false,watch:true,pollingInterval:0});
+  app=await createApp({files:path.join(temp,'files'),config:path.join(temp,'config'),secureCookie:true,publicMode:false,watch:true,pollingInterval:0,updateInterval:150,keepAlive:100,linkExtensions:true});
   server=app.listen(0,'0.0.0.0');await new Promise(resolve=>server.once('listening',resolve));
   const template=await fs.readFile(path.join(root,'deploy/nginx.conf'),'utf8');
   await fs.writeFile(path.join(temp,'default.conf'),template.replace('http://127.0.0.1:8094',`http://host.docker.internal:${server.address().port}`));
@@ -46,6 +46,13 @@ try {
   assert.equal((await request('/api/upload?path=proxy.txt',{method:'PUT',headers,body:'0123456789'})).status,201);
   const range=await request('/api/file?path=proxy.txt',{headers:{...headers,Range:'bytes=2-5'}});
   assert.equal(range.status,206);assert.equal(range.body,'2345');
+  const created=await request('/api/shares',{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({path:'proxy.txt'})});
+  assert.equal(created.status,201);const share=JSON.parse(created.body);
+  assert.equal(share.url,`/s/${share.id}.txt`);
+  const shared=await request(share.url,{headers:{Range:'bytes=2-5'}});
+  assert.equal(shared.status,206);assert.equal(shared.body,'2345');
+  assert.equal((await request('/api/shares/'+share.id,{method:'DELETE',headers})).status,200);
+  assert.equal((await request(share.url)).status,404);
   assert.equal((await request('/api/create',{method:'POST',headers:{...headers,'Content-Type':'application/json',Origin:'https://wrong.invalid'},body:JSON.stringify({path:'denied.txt'})})).status,403);
   assert.equal((await request('/api/create',{method:'POST',headers:{...headers,'Content-Type':'application/json','X-CSRF-Token':'wrong'},body:JSON.stringify({path:'denied.txt'})})).status,403);
   await new Promise((resolve,reject)=>{
@@ -55,13 +62,13 @@ try {
       res.on('data',chunk=>{
         text+=chunk;
         if(text.includes('event: ready')&&!wrote){wrote=true;fs.writeFile(path.join(app.root,'external.txt'),'external change').catch(reject);}
-        if(text.includes('event: change')){clearTimeout(timer);res.destroy();req.destroy();resolve();}
+        if(text.includes('event: change')&&text.includes(': heartbeat')){clearTimeout(timer);res.destroy();req.destroy();resolve();}
       });
     });
     const timer=setTimeout(()=>{req.destroy();reject(new Error('SSE events were not delivered through nginx'));},5000);
     req.on('error',error=>{clearTimeout(timer);reject(error);});
   });
-  console.log('HTTPS nginx proxy passed: trusted TLS, setup, Secure cookie, Origin/CSRF, streaming upload, range download and unbuffered live updates.');
+  console.log('HTTPS nginx proxy passed: trusted TLS, setup, Secure cookie, Origin/CSRF, streaming upload, range download, extension share/revocation, unbuffered live updates and configured heartbeat.');
 } finally {
   agent?.destroy();
   if(running)docker('rm','--force',name);
