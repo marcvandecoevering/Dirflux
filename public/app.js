@@ -71,14 +71,41 @@ async function api(url, options = {}) {
 function on(element, event, action) {
   element.addEventListener(event, async e => { try { await action(e); } catch (error) { toast(error.message, true); } });
 }
-function closeDialog() {
-  if (closeHook && !closeHook()) return;
+async function closeDialog() {
+  if (closeHook && !await closeHook()) return;
   videoPlayback?.destroy(); videoPlayback=null; imageViewer?.destroy(); imageViewer=null;
   editorInstance?.destroy(); editorInstance=null; currentMedia=null;
   $('#dialog').close(); $('#dialog-content').replaceChildren(); state.dirty = false; closeHook = null;
   if(viewerMode)window.parent.postMessage({type:'droppy-close'},location.origin);
 }
-window.confirmCloseView = () => !state.dirty || confirm('Wijzigingen zijn nog niet opgeslagen. Toch sluiten?');
+let discardPrompt = null;
+function confirmDiscardChanges() {
+  if (!state.dirty) return Promise.resolve(true);
+  // Only the action that opened the prompt may proceed after confirmation.
+  // A second navigation or close request must not reuse its approval.
+  if (discardPrompt) return Promise.resolve(false);
+  const dialog = document.createElement('dialog');
+  dialog.className = 'discard-dialog';
+  dialog.setAttribute('aria-labelledby', 'discard-title');
+  dialog.innerHTML = '<h2 id="discard-title">Niet-opgeslagen wijzigingen</h2><p>Je wijzigingen zijn nog niet opgeslagen. Wil je verder bewerken of ze verwerpen?</p><form method="dialog" class="dialog-actions"><button value="cancel" class="secondary" autofocus>Verder bewerken</button><button value="discard" class="danger">Wijzigingen verwerpen</button></form>';
+  discardPrompt = new Promise(resolve => {
+    dialog.addEventListener('close', () => {
+      const discard = dialog.returnValue === 'discard';
+      dialog.remove(); discardPrompt = null;
+      resolve(discard);
+    }, { once: true });
+  });
+  document.body.append(dialog);
+  dialog.showModal();
+  return discardPrompt;
+}
+window.confirmCloseView = confirmDiscardChanges;
+async function confirmCloseFrames() {
+  for (const frame of $$('.file-view')) {
+    if (await frame.contentWindow.confirmCloseView?.() === false) return false;
+  }
+  return true;
+}
 function showDialog(title, html, className = '') {
   videoPlayback?.destroy(); videoPlayback=null; imageViewer?.destroy(); imageViewer=null;
   editorInstance?.destroy(); editorInstance=null; currentMedia=null;
@@ -151,7 +178,7 @@ document.addEventListener('fullscreenchange',()=>{
 async function navigate(index, path) {
   const pane = state.panes[index];
   const frame=$(`[data-pane="${index}"] iframe`);
-  if(frame && frame.contentWindow.confirmCloseView?.()===false)return;
+  if(frame && await frame.contentWindow.confirmCloseView?.()===false)return;
   await leavePaneFullscreen($(`[data-pane="${index}"]`));
   if(frame)frame.remove();pane.open=null;
   pane.path = path; pane.query = ''; pane.selected.clear();
@@ -164,7 +191,7 @@ function recordLocation(replace=false) {
 }
 async function restoreLocation() {
   if(viewerMode||!state.user||!location.hash)return;
-  if($$('.file-view').some(f=>f.contentWindow.confirmCloseView?.()===false)){recordLocation(true);return;}
+  if(!await confirmCloseFrames()){recordLocation(true);return;}
   const paths=location.hash.replace(/^#\/?/,'').split('|').slice(0,2).map(decodeURIComponent),panes=[];
   for(const locationPath of paths){
     try{const item=await api('/stat?path='+encodeURIComponent(locationPath));panes.push({path:item.directory?item.path:parent(item.path),open:item.directory?null:{item,forceText:false},items:[],selected:new Set(),sort:'name'});}
@@ -434,7 +461,7 @@ async function openFile(item, index, forceText=false) {
   $('#editor-find').onclick=()=>editorInstance.find();$('#editor-download').onclick=()=>download(item);
     $('#wrap').onclick=()=>{prefs.lineWrapping=!prefs.lineWrapping;editorInstance.wrap(prefs.lineWrapping);localStorage.setItem('droppy-next-prefs',JSON.stringify(prefs));};
   $('#fullscreen').onclick=()=>(viewerMode?window.parent.postMessage({type:'droppy-fullscreen'},location.origin):$('#dialog').classList.toggle('fullscreen-dialog'));
-  closeHook=()=>!state.dirty||confirm('Wijzigingen zijn nog niet opgeslagen. Toch sluiten?');
+  closeHook=confirmDiscardChanges;
   editorInstance.focus();
 }
 async function share(item) {
@@ -593,7 +620,7 @@ on($('#login-form'), 'submit', async e => {
   catch (error) { $('#auth-error').textContent = error.message; }
   finally { $('#login-button').disabled = false; }
 });
-on($('#logout'), 'click', async () => { if($$('.file-view').some(f=>f.contentWindow.confirmCloseView?.()===false))return; const wasGuest=state.user?.guest; for(const pane of $$('.pane.is-fullscreen'))await leavePaneFullscreen(pane); await api('/logout', { method:'POST' }); if(wasGuest){location.href='/?login=1';return;} state.user = null; state.panes = [{ path:'', items:[], selected:new Set(), sort:'name' }]; state.active = 0; await init(); });
+on($('#logout'), 'click', async () => { if(!await confirmCloseFrames())return; const wasGuest=state.user?.guest; for(const pane of $$('.pane.is-fullscreen'))await leavePaneFullscreen(pane); await api('/logout', { method:'POST' }); if(wasGuest){location.href='/?login=1';return;} state.user = null; state.panes = [{ path:'', items:[], selected:new Set(), sort:'name' }]; state.active = 0; await init(); });
 on($('#refresh'), 'click', () => refreshAll());
 on($('#new-folder'), 'click', () => create(true)); on($('#new-file'), 'click', () => create(false));
 $('#upload-button').onclick = () => $('#file-input').click(); $('#upload-folder').onclick = () => $('#folder-input').click();
@@ -602,7 +629,7 @@ for (const id of ['#file-input','#folder-input']) {
   on($(id), 'change', async e => { const files = [...e.target.files].map(file => ({ file, path:file.webkitRelativePath || file.name })); const destination=e.target.dataset.destination??active().path; e.target.value = ''; await upload(files, destination); });
 }
 on($('#split'), 'click', async () => {
-  if (state.panes.length === 2) {const frame=$('[data-pane="1"] iframe');if(frame&&frame.contentWindow.confirmCloseView?.()===false)return;state.panes = [state.panes[0]]; state.active = 0; }
+  if (state.panes.length === 2) {const frame=$('[data-pane="1"] iframe');if(frame&&await frame.contentWindow.confirmCloseView?.()===false)return;state.panes = [state.panes[0]]; state.active = 0; }
   else state.panes.push({ path:active().path, items:[], selected:new Set(), sort:'name' });
   $('#split').setAttribute('aria-pressed', String(state.panes.length === 2)); renderPanes(); await refreshAll();recordLocation();
   if(!eventSource){eventSource=new EventSource('/api/events');eventSource.addEventListener('change',()=>{if(!$('#dialog').open&&!state.uploading)refreshAll(true);});}
