@@ -28,6 +28,7 @@ let uploadConflictQueue = Promise.resolve();
 let nativeFullscreenPane = null;
 let videoPlayback = null, imageViewer = null, imageFitMode = 'fit';
 let editorInstance = null, currentMedia = null, clipboard = null, audioItems = [], audioIndex = 0, eventSource = null;
+let suspendedWorkspaceOwner=null;
 let stopAudio = () => {};
 const defaultPrefs = { theme:'droppy',editorFontSize:16,indentWithTabs:false,indentUnit:4,lineWrapping:false,loop:true,autonext:false,sharelinkDownload:true };
 let prefs;
@@ -71,9 +72,13 @@ async function api(url, options = {}) {
       if(renewed.csrf&&renewed.csrf!==state.csrf){state.csrf=renewed.csrf;return api(url,{...options,headers,retried:true});}
     }
     if (response.status === 401 && state.user) {
-      const owner=state.user.id;state.user=null;state.csrf=null;
-      if(editorInstance&&state.dirty)pauseEditorSession(owner);
-      else await init();
+      const owner=state.user.id;
+      if(editorInstance&&state.dirty){
+        state.user=null;state.csrf=null;pauseEditorSession(owner);
+        if(viewerMode)window.parent.pauseWorkspaceSession?.(owner);
+      } else if(viewerMode||!pauseWorkspaceSession(owner)) {
+        state.user=null;state.csrf=null;await init();
+      }
     }
     throw new Error(body.error || 'Verzoek mislukt.');
   }
@@ -128,11 +133,36 @@ function pauseEditorSession(owner) {
       if(!canEditSession(session,owner))throw new Error('Meld je aan met hetzelfde account met bewerkrechten. Je concept blijft behouden.');
       Object.assign(state,session);document.body.classList.remove('read-only');
       save.disabled=false;status.textContent='Unsaved changes';
+      if(viewerMode)window.parent.resumeWorkspaceSession?.(session,owner,window);
       toast('Sessie hersteld. Je kunt het concept nu opslaan.');
     } finally {if(resume.isConnected)resume.disabled=false;}
   });
 }
 window.confirmCloseView = confirmDiscardChanges;
+window.hasUnsavedChanges=()=>state.dirty;
+window.pauseExpiredEditor=owner=>{
+  if(editorInstance&&state.dirty&&state.user?.id===owner){state.user=null;state.csrf=null;pauseEditorSession(owner);}
+};
+function pauseWorkspaceSession(owner) {
+  if(viewerMode||(state.user?.id!==owner&&suspendedWorkspaceOwner!==owner))return false;
+  const frames=$$('.file-view').filter(frame=>frame.contentWindow.hasUnsavedChanges?.());
+  if(!frames.length)return false;
+  suspendedWorkspaceOwner=owner;state.user=null;state.csrf=null;
+  document.body.classList.add('read-only');clipboard=null;
+  for(const job of uploadJobs)job.cancel();
+  eventSource?.close();eventSource=null;
+  for(const frame of frames)frame.contentWindow.pauseExpiredEditor?.(owner);
+  toast('Sessie verlopen. Meld je opnieuw aan via je open editor. Je concepten blijven behouden.',true);
+  return true;
+}
+window.pauseWorkspaceSession=pauseWorkspaceSession;
+window.resumeWorkspaceSession=(session,owner,source)=>{
+  if(viewerMode||suspendedWorkspaceOwner!==owner||!canEditSession(session,owner)||!$$('.file-view').some(frame=>frame.contentWindow===source))return;
+  Object.assign(state,session);suspendedWorkspaceOwner=null;
+  document.body.classList.remove('read-only');
+  renderPanes(); // Existing viewer frames are retained by renderPane.
+  startLiveEvents();
+};
 let viewTransitionBusy = false;
 let transitionFrames = [];
 window.viewTransitionPending = () => viewTransitionBusy;
@@ -702,6 +732,9 @@ async function upload(files, destination) {
   await refreshAll();
   toast(`${completed} van ${files.length} bestand(en)/map(pen) verwerkt.${job.cancelled ? ' Upload geannuleerd.' : ''}`, errors.length > 0);
 }
+function startLiveEvents() {
+  if(!viewerMode&&state.user&&!eventSource){eventSource=new EventSource('/api/events');eventSource.addEventListener('change',()=>{if(!$('#dialog').open&&!state.uploading)refreshAll(true);});}
+}
 async function init() {
   const session = await api('/session'+(viewParameters.get('login')==='1'?'?login=1':'')); Object.assign(state, session);
   $('#auth').hidden = !!state.user; $('#shell').hidden = !state.user;
@@ -733,7 +766,7 @@ async function init() {
   if(viewerMode)state.panes[0].path=parent(viewParameters.get('path')||'');
   renderPanes(); await refreshAll();
   if(viewerMode){const item=state.panes[0].items.find(i=>i.path===viewParameters.get('path'));if(item)await openFile(item,0,viewParameters.get('edit')==='1');else showDialog('Not found','<p>Dit bestand bestaat niet meer.</p>');}
-  if(!viewerMode&&!eventSource){eventSource=new EventSource('/api/events');eventSource.addEventListener('change',()=>{if(!$('#dialog').open&&!state.uploading)refreshAll(true);});}
+  startLiveEvents();
 }
 on($('#login-form'), 'submit', async e => {
   e.preventDefault(); $('#login-button').disabled = true; $('#auth-error').textContent = '';
@@ -753,7 +786,7 @@ on($('#split'), 'click', () => changeView(async () => {
   if (state.panes.length === 2) {const frame=$('[data-pane="1"] iframe');if(frame&&await frame.contentWindow.confirmCloseView?.()===false)return;state.panes = [state.panes[0]]; state.active = 0; }
   else state.panes.push({ path:active().path, items:[], selected:new Set(), sort:'name' });
   $('#split').setAttribute('aria-pressed', String(state.panes.length === 2)); renderPanes(); await refreshAll();recordLocation();
-  if(!eventSource){eventSource=new EventSource('/api/events');eventSource.addEventListener('change',()=>{if(!$('#dialog').open&&!state.uploading)refreshAll(true);});}
+  startLiveEvents();
 }));
 on($('#search-form'), 'submit', async e => { e.preventDefault(); const q = $('#search').value.trim(); active().query = q; active().selected.clear(); await loadPane(state.active); });
 on($('#search'), 'search', async () => { if (!$('#search').value) { active().query = ''; await loadPane(state.active); } });
@@ -788,7 +821,7 @@ on(document,'keydown',async e=>{
   if(shortcut==='paste'){e.preventDefault();await pasteFiles(active().path);}
   if(e.key==='Backspace'){e.preventDefault();await navigate(state.active,parent(active().path));}
 });
-window.addEventListener('beforeunload', e => { if (state.dirty || state.uploading) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', e => { if (state.dirty || state.uploading || $$('.file-view').some(frame=>frame.contentWindow.hasUnsavedChanges?.())) { e.preventDefault(); e.returnValue = ''; } });
 for(const [event,operation] of [['copy','copy'],['cut','move']])on(document,event,e=>{
   if(e.defaultPrevented||!state.user||$('#dialog').open||e.target.closest('input,textarea,select,[contenteditable]')||window.getSelection()?.toString())return;
   const items=active().items.filter(item=>active().selected.has(item.path));
