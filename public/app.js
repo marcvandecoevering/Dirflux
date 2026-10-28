@@ -5,6 +5,9 @@ const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const viewParameters = new URLSearchParams(location.search);
 const viewerMode = viewParameters.get('viewer') === '1';
+let historyPosition=Number.isSafeInteger(history.state?.fileAppPosition)?history.state.fileAppPosition:0;
+let currentHistoryUrl=location.href,historyRequest=0;
+if(!viewerMode)history.replaceState({fileAppPosition:historyPosition},'',location.href);
 if (viewerMode) document.body.classList.add('viewer-mode');
 const state = { user: null, csrf: '', readOnly: false, setup: false, panes: [{ path: '', items: [], selected: new Set(), sort: 'name', descending: false }], active: 0, uploading: false, search: '', dirty: false };
 const icons = name => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
@@ -218,21 +221,40 @@ async function openDroppedItem(raw,index) {
 function recordLocation(replace=false) {
   if(viewerMode)return;
   const hash='#/'+state.panes.map(p=>encodeURIComponent(p.open?.item.path||p.path)).join('|');
-  if(location.hash!==hash)history[replace?'replaceState':'pushState'](null,'',hash);
+  if(location.hash!==hash){
+    if(!replace)historyPosition++;
+    history[replace?'replaceState':'pushState']({fileAppPosition:historyPosition},'',hash);
+  }else if(replace)history.replaceState({fileAppPosition:historyPosition},'',hash);
+  currentHistoryUrl=location.href;
 }
-async function restoreLocation() {
-  if(viewerMode||!state.user||!location.hash)return;
-  if(viewTransitionBusy){recordLocation(true);return;}
+function cancelHistoryNavigation(){
+  const target=history.state?.fileAppPosition;
+  if(Number.isSafeInteger(target)&&target!==historyPosition)history.go(historyPosition-target);
+  else history.replaceState({fileAppPosition:historyPosition},'',currentHistoryUrl);
+}
+async function restoreLocation(fromHistory=false) {
+  if(viewerMode||!state.user)return;
+  // Returning to a cancelled entry must not reopen or discard its existing editors.
+  if(fromHistory&&location.href===currentHistoryUrl&&history.state?.fileAppPosition===historyPosition){if(viewTransitionBusy)historyRequest++;return;}
+  const request=++historyRequest;
+  if(viewTransitionBusy){cancelHistoryNavigation();return;}
   return changeView(async () => {
   const requestedHash = location.hash;
-  if(!await confirmCloseFrames()){recordLocation(true);return;}
+  const requestedPosition=history.state?.fileAppPosition;
+  const approved=await confirmCloseFrames();
+  if(request!==historyRequest)return;
+  if(!approved){cancelHistoryNavigation();return;}
   const paths=requestedHash.replace(/^#\/?/,'').split('|').slice(0,2).map(decodeURIComponent),panes=[];
   for(const locationPath of paths){
     try{const item=await api('/stat?path='+encodeURIComponent(locationPath));panes.push({path:item.directory?item.path:parent(item.path),open:item.directory?null:{item,forceText:false},items:[],selected:new Set(),sort:'name'});}
     catch(error){toast(error.message,true);panes.push({path:'',items:[],selected:new Set(),sort:'name'});}
   }
-  state.panes=panes;state.active=0;$('#panes').replaceChildren();renderPanes();await refreshAll();
+  if(request!==historyRequest)return;
+  state.panes=panes;state.active=0;$('#panes').replaceChildren();
+  if(Number.isSafeInteger(requestedPosition))historyPosition=requestedPosition;
+  else if(fromHistory)historyPosition++;
   recordLocation(true);
+  renderPanes();await refreshAll();
   });
 }
 function renderPanes() {
@@ -743,7 +765,7 @@ window.addEventListener('message',async e=>{
   } catch(error){toast(error.message,true);}
 });
 setInterval(() => { if (!viewerMode && state.user && !document.hidden && !$('#dialog').open && !$('.menu') && !state.uploading) refreshAll(true); }, 15000);
-window.addEventListener('popstate',()=>restoreLocation().catch(e=>toast(e.message,true)));
+window.addEventListener('popstate',()=>restoreLocation(true).catch(e=>toast(e.message,true)));
 init().catch(error => {
   $('#auth').hidden=false;$('#shell').hidden=true;$('#auth-error').textContent=error.message;
   const link=document.createElement('a');link.href='/?login=1';link.className='secondary';link.textContent='Aanmelden of server instellen';$('#auth-error').after(link);
