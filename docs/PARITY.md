@@ -61,3 +61,5 @@ Move-recovery tests inject an interruption immediately before/after filesystem r
 Runner labels are based on the [GitHub-hosted runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners). Configured CI is not evidence of a successful remote run.
 
 Original proxy references: [nginx](https://github.com/silverwind/droppy/wiki/Nginx-reverse-proxy) and [Apache](https://github.com/silverwind/droppy/wiki/Apache-reverse-proxy). Both examples proxy the hostname root; this is not evidence of subpath support.
+
+Unraid publication preparation now includes a metadata generator (`scripts/unraid-template.js`) and [deployment/review steps](UNRAID_PUBLICATION.md). Generated beta XML parses locally and rejects unsafe metadata inputs. No final identity has been applied, no registry/repository URLs have been invented for publication, and no submission or Unraid installation has occurred.
