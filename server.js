@@ -1,4 +1,5 @@
 import {createAttemptLimiter} from './lib/rate-limit.js';
+import {createEventSink} from './lib/event-sink.js';
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
@@ -113,7 +114,7 @@ export async function createApp(options = {}) {
   const eventClients = new Set();
   const sizeCache = new Map();
   let watchTimer;
-  const emitChange = () => { for (const client of eventClients) client.write('event: change\ndata: {}\n\n'); };
+  const emitChange = () => { for (const client of eventClients) client.change(); };
   const notifyChange = () => {
     sizeCache.clear();
     if(!updateInterval){emitChange();return;}
@@ -332,16 +333,19 @@ export async function createApp(options = {}) {
   const writable = (req, _res, next) => next(readOnly || req.auth.role === 'viewer' ? fail(403, 'Deze gebruiker heeft alleen leestoegang.') : undefined);
   app.get('/api/events', (req, res) => {
     res.set({'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});
-    res.flushHeaders();res.write('event: ready\ndata: {}\n\n');eventClients.add(res);
+    res.flushHeaders();
     const validSession=()=>{
       if(closed||res.destroyed||res.writableEnded)return false;
       if (!db.prepare('SELECT id FROM sessions WHERE id=? AND expires>?').get(req.auth.session_id,Date.now())) {res.end();return false;}
       return true;
     };
-    const heartbeat=keepAlive?setInterval(()=>{if(validSession())res.write(': heartbeat\n\n');},keepAlive):undefined;
+    const sink=createEventSink(res,validSession);
+    const client={change:()=>sink.change(),end:()=>{sink.close();res.end();}};
+    eventClients.add(client);
+    const heartbeat=keepAlive?setInterval(()=>{if(validSession())sink.heartbeat();},keepAlive):undefined;
     // Disabling/slowing keepalive must not disable session expiry/revocation checks.
     const sessionCheck=!keepAlive||keepAlive>20000?setInterval(validSession,20000):undefined;
-    res.on('close',()=>{clearInterval(heartbeat);clearInterval(sessionCheck);eventClients.delete(res);});
+    res.on('close',()=>{sink.close();clearInterval(heartbeat);clearInterval(sessionCheck);eventClients.delete(client);});
   });
   const admin = (req, _res, next) => next(req.auth.role !== 'admin' ? fail(403, 'Alleen voor beheerders.') : undefined);
   // Serialize filesystem commits. Receiving an upload must not lock out other users.
