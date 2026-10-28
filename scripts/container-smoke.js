@@ -64,6 +64,26 @@ try {
   await start();
   assert.equal((await request('/api/files')).status,401);
   await login('/api/setup');
+  // Exercise files from the built image, not the checkout's generated assets.
+  for(const resource of ['wasm/openjpeg_nowasm_fallback.js','wasm/jbig2_nowasm_fallback.js','wasm/LICENSE_OPENJPEG','wasm/LICENSE_JBIG2','iccs/CGATS001Compat-v2-micro.icc','iccs/LICENSE']) {
+    const response=await request('/vendor/'+resource);
+    assert.equal(response.status,200,`Missing PDF resource: ${resource}`);
+    if(resource.endsWith('.js'))assert.match(response.headers.get('content-type'),/(?:javascript|ecmascript)/);
+    assert.ok((await response.arrayBuffer()).byteLength>0,`Empty PDF resource: ${resource}`);
+  }
+  const inventoryResponse=await request('/vendor/licenses/packages.json');
+  assert.equal(inventoryResponse.status,200);
+  const inventory=await inventoryResponse.json();
+  assert.equal(inventory.schemaVersion,1);assert.ok(inventory.packages.length>0);
+  for(const entry of inventory.packages) {
+    assert.ok(entry.files.length>0,`Missing notices: ${entry.name}`);
+    for(const file of entry.files) {
+      assert.equal(path.basename(file.path),file.path);
+      const response=await request('/vendor/licenses/'+encodeURIComponent(file.path));
+      assert.equal(response.status,200,`Missing notice: ${file.path}`);
+      assert.equal(crypto.createHash('sha256').update(Buffer.from(await response.arrayBuffer())).digest('hex'),file.sha256,`Changed notice: ${file.path}`);
+    }
+  }
   const uploaded=await fetch(base+'/api/upload?path=persist.txt',{method:'PUT',headers:{Cookie:cookie,'X-CSRF-Token':csrf},body:'persistent content'});
   assert.equal(uploaded.status,201,await uploaded.text());
   docker('run','--platform',platform,'--detach','--name',duplicateName,'--user','99:100','--read-only','--cap-drop=ALL','--security-opt','no-new-privileges',
@@ -90,7 +110,7 @@ try {
   await start(true); await login();
   assert.equal((await request('/api/create','POST',{path:'forbidden.txt'})).status,403);
   assert.equal((await request('/api/file?path=persist.txt&download=1')).status,200);
-  console.log(`Container smoke passed (${platform}): UID/GID 99:100, restricted filesystem, upload, duplicate-container rejection, restart persistence and read-only mount.`);
+  console.log(`Container smoke passed (${platform}): UID/GID 99:100, PDF resources, ${inventory.packages.length} bundled package notices, restricted filesystem, upload, duplicate-container rejection, restart persistence and read-only mount.`);
 } finally {
   if(duplicateCreated)docker('rm','--force',duplicateName);
   if(running) docker('rm','--force',name);
