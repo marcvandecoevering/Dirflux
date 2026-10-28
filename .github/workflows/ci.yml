@@ -102,6 +102,21 @@ jobs:
           --mount "type=bind,src=${{ github.workspace }}/scripts,dst=/app/scripts,readonly"
           --entrypoint node local/file-app-ci --test
       - run: node scripts/container-smoke.js local/file-app-ci
+      - name: Scan the built image for known OS and package vulnerabilities
+        run: |
+          docker image save local/file-app-ci --output "$RUNNER_TEMP/dirflux-image.tar"
+          docker run --rm --cap-drop=ALL --security-opt no-new-privileges \
+            --mount "type=bind,src=$RUNNER_TEMP,dst=/scan,readonly" \
+            aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+            image --scanners vuln --format json --input /scan/dirflux-image.tar \
+            > "$RUNNER_TEMP/container-vulnerabilities.json"
+          node scripts/check-vulnerabilities.js "$RUNNER_TEMP/container-vulnerabilities.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: ${{ !cancelled() }}
+        with:
+          name: container-vulnerabilities-${{ matrix.os }}
+          path: ${{ runner.temp }}/container-vulnerabilities.json
+          if-no-files-found: warn
       - name: Verify ZIP64 entry count above 65535
         run: >-
           docker run --rm --read-only --cap-drop=ALL --security-opt no-new-privileges

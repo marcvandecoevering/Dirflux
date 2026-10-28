@@ -282,7 +282,7 @@ export async function createApp(options = {}) {
     }
     return jsonBody(req,res,next);
   });
-  app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'dirflux', version: '0.1.0' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'dirflux', version: '0.1.0-beta.1' }));
   app.get('/api/session', (req, res) => {
     if(publicMode&&!req.auth&&req.query.login!=='1')return res.json({...session(res,guestUser),setup:false,setupTokenRequired:false,publicMode});
     const auth=req.query.login==='1'&&req.auth?.guest?null:req.auth;
