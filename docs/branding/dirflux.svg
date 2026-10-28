@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Dirflux">
+<rect width="96" height="96" rx="22" fill="#122e32"/>
+<path d="M24 29h37l-7-7m7 7-7 7M72 67H35l7 7m-7-7 7-7" fill="none" stroke="#67e5bc" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
+<path d="M24 42v25m48-38v25" fill="none" stroke="#f4faf7" stroke-width="6"/>
+</svg>
