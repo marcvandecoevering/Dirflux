@@ -78,3 +78,13 @@ jobs:
           --tmpfs /tmp:rw,noexec,nosuid,size=128m
           --mount "type=bind,src=${{ github.workspace }}/scripts,dst=/app/scripts,readonly"
           --entrypoint node local/file-app-ci scripts/large-archive-smoke.js
+      - name: Verify downloaded ZIP above 4 GiB
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          scratch="$(mktemp -d)"
+          trap 'rmdir "$scratch"' EXIT
+          docker run --rm --read-only --cap-drop=ALL --security-opt no-new-privileges \
+            --user "$(id -u):$(id -g)" \
+            --mount "type=bind,src=$scratch,dst=/scratch" \
+            --mount "type=bind,src=${{ github.workspace }}/scripts,dst=/app/scripts,readonly" \
+            --entrypoint node local/file-app-ci scripts/large-output-archive-smoke.js /scratch
