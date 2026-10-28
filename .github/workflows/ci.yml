@@ -22,6 +22,25 @@ concurrency:
   group: verify-${{ github.workflow }}-${{ inputs.ref || github.ref }}
   cancel-in-progress: true
 jobs:
+  workflows:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+      - name: Validate GitHub Actions definitions with pinned actionlint
+        run: |
+          set -euo pipefail
+          directory="$(mktemp -d "$RUNNER_TEMP/actionlint.XXXXXXXX")"
+          curl --fail --location --retry 3 \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$directory/actionlint.tar.gz"
+          echo '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz' > "$directory/SHA256SUMS"
+          (cd "$directory" && sha256sum --check SHA256SUMS)
+          tar -xzf "$directory/actionlint.tar.gz" -C "$directory"
+          "$directory/actionlint" -shellcheck= -pyflakes=
   native:
     strategy:
       fail-fast: false
