@@ -10,6 +10,8 @@ const image = process.argv[2];
 if (!image || image.startsWith('-')) throw new Error('Pass the image name to test.');
 const docker = (...args) => execFileSync('docker',args,{encoding:'utf8',timeout:120000}).trim();
 docker('info','--format','{{.ServerVersion}}');
+const platform=docker('image','inspect',image,'--format','{{.Os}}/{{.Architecture}}');
+if(!['linux/amd64','linux/arm64'].includes(platform))throw new Error('Unsupported image platform: '+platform);
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(),'file-app-container-'));
 const name = 'file-app-test-' + crypto.randomBytes(6).toString('hex');
 const password = crypto.randomBytes(32).toString('hex');
@@ -33,13 +35,14 @@ async function waitHealthy() {
   throw new Error('Container did not become healthy: '+docker('logs',name));
 }
 async function start(readOnly=false) {
-  docker('run','--detach','--name',name,'--user','99:100','--read-only','--cap-drop=ALL','--security-opt','no-new-privileges',
+  docker('run','--platform',platform,'--detach','--name',name,'--user','99:100','--read-only','--cap-drop=ALL','--security-opt','no-new-privileges',
     '--tmpfs','/tmp:rw,noexec,nosuid,size=64m','--publish','127.0.0.1::8094',
     '--mount',filesMount+(readOnly?',readonly':''),
     '--mount',configMount,'--env',`READ_ONLY=${readOnly}`,image);
   running=true;
   await waitHealthy();
   docker('exec',name,'node','lib/health-check.js');
+  assert.equal(docker('exec',name,'node','-p','process.arch'),platform==='linux/arm64'?'arm64':'x64');
   assert.equal(docker('exec',name,'id','-u'),'99');
   assert.equal(docker('exec',name,'id','-g'),'100');
 }
@@ -55,7 +58,7 @@ async function login(route='/api/login') {
 try {
   if(linuxVolumes) {
     for(const suffix of ['files','config']){const volume=name+'-'+suffix;docker('volume','create',volume);createdVolumes.push(volume);}
-    docker('run','--rm','--user','0:0','--mount',filesMount,'--mount',configMount,'--entrypoint','sh',image,'-c','chown 99:100 /files /config');
+    docker('run','--platform',platform,'--rm','--user','0:0','--mount',filesMount,'--mount',configMount,'--entrypoint','sh',image,'-c','chown 99:100 /files /config');
   }
   await start();
   assert.equal((await request('/api/files')).status,401);
@@ -71,7 +74,7 @@ try {
   await start(true); await login();
   assert.equal((await request('/api/create','POST',{path:'forbidden.txt'})).status,403);
   assert.equal((await request('/api/file?path=persist.txt&download=1')).status,200);
-  console.log('Container smoke passed: UID/GID 99:100, restricted filesystem, upload, restart persistence and read-only mount.');
+  console.log(`Container smoke passed (${platform}): UID/GID 99:100, restricted filesystem, upload, restart persistence and read-only mount.`);
 } finally {
   if(running) docker('rm','--force',name);
   for(const volume of createdVolumes)docker('volume','rm',volume);
