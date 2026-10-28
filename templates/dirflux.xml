@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Container version="2">
   <Name>Dirflux</Name>
-  <Repository>ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2</Repository>
+  <Repository>ghcr.io/marcvandecoevering/dirflux:beta</Repository>
   <Network>bridge</Network>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <ExtraParams>--user=99:100 --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs=/tmp:rw,noexec,nosuid,size=64m</ExtraParams>
+  <ExtraParams>--read-only --cap-drop=ALL --cap-add=CHOWN --cap-add=FOWNER --cap-add=DAC_OVERRIDE --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges --tmpfs=/tmp:rw,noexec,nosuid,size=64m</ExtraParams>
   <WebUI>http://[IP]:[PORT:8094]/</WebUI>
   <Icon>https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/public/brand/dirflux-512.png</Icon>
   <Project>https://github.com/marcvandecoevering/Dirflux</Project>
@@ -15,11 +15,14 @@
   <Category>Tools:System</Category>
   <License>BSD-2-Clause</License>
   <Beta>true</Beta>
-  <Overview>Dirflux is a self-hosted file manager with two panes, uploads, previews, editing and share links. Development release. First setup requires the one-time code in /config/setup-token. Protect remote access with HTTPS.</Overview>
-  <Requires>Prepare separate files and config folders writable by UID 99/GID 100. No automatic recursive ownership changes are performed.</Requires>
+  <Overview>Dirflux is a self-hosted file manager with two panes, uploads, previews, editing and share links. Beta release. Set the initial administrator password during installation, then sign in as admin. Protect remote access with HTTPS.</Overview>
+  <Requires>Use separate Files and Appdata folders. Empty mount roots are initialized automatically; existing files and permissions are preserved.</Requires>
   <Config Name="Web interface" Target="8094" Default="8094" Mode="tcp" Description="HTTP port. Use an HTTPS proxy for remote access." Type="Port" Display="always" Required="true" Mask="false"/>
   <Config Name="Files" Target="/files" Default="/mnt/user/dirflux" Mode="rw" Description="Only this folder is exposed through the file manager. Keep it outside Appdata." Type="Path" Display="always" Required="true" Mask="false"/>
   <Config Name="Appdata" Target="/config" Default="/mnt/user/appdata/dirflux" Mode="rw" Description="Private accounts, sessions, settings and trash. Never place inside Files." Type="Path" Display="always" Required="true" Mask="false"/>
+  <Config Name="Initial administrator password" Target="INITIAL_ADMIN_PASSWORD" Default="" Mode="" Description="Choose 12–1024 characters. Used only when no account exists; never resets an existing password." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="User ID" Target="PUID" Default="99" Mode="" Description="Numeric application user ID." Type="Variable" Display="advanced" Required="true" Mask="false"/>
+  <Config Name="Group ID" Target="PGID" Default="100" Mode="" Description="Numeric application group ID." Type="Variable" Display="advanced" Required="true" Mask="false"/>
   <Config Name="Read only" Target="READ_ONLY" Default="false" Mode="" Description="Set true to disable file mutations." Type="Variable" Display="advanced" Required="true" Mask="false"/>
   <Config Name="Secure cookies" Target="COOKIE_SECURE" Default="false" Mode="" Description="Set true only when accessing through HTTPS." Type="Variable" Display="advanced" Required="true" Mask="false"/>
 </Container>

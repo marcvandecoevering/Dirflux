@@ -3,7 +3,7 @@
   "slug": "dirflux",
   "project": "https://github.com/marcvandecoevering/Dirflux",
   "templateRepository": "https://github.com/marcvandecoevering/unraid-templates",
-  "image": "ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2",
+  "image": "ghcr.io/marcvandecoevering/dirflux:beta",
   "icon": "https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/public/brand/dirflux-512.png",
   "branch": "main"
 }

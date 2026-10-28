@@ -38,22 +38,11 @@ Follow the [native installation, update and recovery procedure](NATIVE_DEPLOYMEN
 
 ## Install the Docker image
 
-The public image supports Linux AMD64 and ARM64. On a Linux Docker host, create two new, separate directories owned by UID/GID 1000:1000, then run:
+The public `ghcr.io/marcvandecoevering/dirflux:beta` image supports Linux AMD64 and ARM64. Map separate host folders to `/files` and `/config`, publish container port `8094`, and set `INITIAL_ADMIN_PASSWORD` to a password of 12–1024 characters. Sign in as `admin`. Use an HTTPS proxy for remote access.
 
-```sh
-docker run -d --name dirflux --restart unless-stopped \
-  --user 1000:1000 --read-only --cap-drop ALL \
-  --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=64m \
-  -p 127.0.0.1:8094:8094 \
-  --mount type=bind,src=/YOUR/FILES,dst=/files \
-  --mount type=bind,src=/YOUR/CONFIG,dst=/config \
-  ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2
-docker exec dirflux cat /config/setup-token
-```
+New empty mount roots are initialized for `PUID=99` and `PGID=100` by default; existing files and permissions are left untouched. For Unraid, follow the [installation guide](UNRAID.md). An explicit non-root Docker user is supported but bypasses initialization and requires writable mounts.
 
-Replace both absolute paths with your prepared directories. Open `http://127.0.0.1:8094` and create your administrator account using the code. Use an HTTPS proxy for remote access. For Unraid, use the [Unraid guide](UNRAID.md), which uses UID/GID 99:100 instead.
-
-Image tags are versioned: updates require choosing a new release tag and recreating the container with the same mounts. Stop the app and back up both directories first. Native and container downloads, checksums and vulnerability reports are available in [Releases](https://github.com/marcvandecoevering/Dirflux/releases).
+The `beta` tag receives verified releases. Pull the new image and recreate the container with the same mounts to update. Stop the app and back up both directories first. Versioned images, native downloads, checksums and scan reports remain available in [Releases](https://github.com/marcvandecoevering/Dirflux/releases).
 
 ## Build Docker locally
 
@@ -61,9 +50,9 @@ Image tags are versioned: updates require choosing a new release tag and recreat
 docker compose up -d --build
 ```
 
-The example creates separate file and configuration volumes and binds `127.0.0.1:8094`. The image defaults to UID/GID 1000:1000; a container user override can select another existing UID/GID. The Unraid template uses UID/GID 99:100. Bind-mounted directories must be writable by the configured container user. Do not recursively change ownership of existing user storage as part of container startup.
+The example creates separate file and configuration volumes and binds `127.0.0.1:8094`. The image initializes empty mount roots and drops to PUID/PGID 99:100 by default. An explicit non-root container user bypasses initialization; its mounted folders must already be writable. The Unraid template uses UID/GID 99:100. Bind-mounted directories must be writable by the configured container user. Do not recursively change ownership of existing user storage as part of container startup.
 
-Read `/config/setup-token` from the container console for the initial administrator setup. Both `/config` and `/files` must be persistent. They must not be nested, including through symbolic links. `/config` must be writable even when `/files` is mounted read-only.
+Set `INITIAL_ADMIN_PASSWORD` (12–1024 characters) for direct initial login as `admin`. Without it, read `/config/setup-token` from the container console for protected administrator setup. Both `/config` and `/files` must be persistent. They must not be nested, including through symbolic links. `/config` must be writable even when `/files` is mounted read-only.
 
 Container verification, on a Linux Docker host:
 
@@ -75,6 +64,8 @@ node scripts/container-smoke.js local/file-app-ci
 The smoke test uses temporary data, UID/GID 99:100, a read-only container root, no Linux capabilities and no-new-privileges. It tests uploads, restart persistence and a read-only files mount. On Windows this uses temporary Linux volumes with copying disabled to preserve assigned ownership; Linux CI uses temporary host bind mounts. A passing Compose configuration check alone does not prove any of these behaviors.
 
 ## Configuration
+
+Docker beta.3 supports `PUID` / `PGID` (default 99/100) for empty-folder initialization and privilege dropping. `INITIAL_ADMIN_PASSWORD` and optional `INITIAL_ADMIN_NAME` (default `admin`) create an account only when none exists; they never reset existing accounts. The `beta` image tag receives verified releases; version tags remain fixed.
 
 The [original configuration comparison](CONFIG_PARITY.md) records supported equivalents, intentional differences and remaining gaps.
 

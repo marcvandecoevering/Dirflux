@@ -6,11 +6,11 @@
 
 Your files, in your browser, on your own server. Browse two folders side by side, upload, edit text, preview images/PDFs/media, share links and recover deleted files.
 
-**Beta:** Unraid Apps submission is being prepared. [Releases](https://github.com/marcvandecoevering/Dirflux/releases) · [Support](https://github.com/marcvandecoevering/Dirflux/issues)
+**Beta:** [Releases](https://github.com/marcvandecoevering/Dirflux/releases) · [Support](https://github.com/marcvandecoevering/Dirflux/issues)
 
 ## Get started
 
-**Unraid:** use the [installation guide](docs/UNRAID.md). Dirflux is not yet listed in Community Applications.
+**Unraid:** [install through Apps or Add Container](docs/UNRAID.md). Choose your storage folders and initial administrator password, then sign in as `admin`.
 
 **Without Docker:** install Node.js 24.22.1 or newer, clone this repository, then run:
 
@@ -21,7 +21,7 @@ npm start
 
 Open `http://127.0.0.1:8094`. Read `data/config/setup-token` to create your administrator account. There is no default password.
 
-**Docker:** install [`ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2`](docs/OPERATIONS.md#install-the-docker-image) (AMD64 / ARM64). Persist `/files` and `/config` separately. Use HTTPS for remote access.
+**Docker:** install [`ghcr.io/marcvandecoevering/dirflux:beta`](docs/OPERATIONS.md#install-the-docker-image) (AMD64 / ARM64). Persist `/files` and `/config` separately. Use HTTPS for remote access.
 
 ## Technology and security
 
@@ -32,7 +32,7 @@ Open `http://127.0.0.1:8094`. Read `data/config/setup-token` to create your admi
 | Network | HTTP or HTTPS (native TLS 1.2+), JSON API, Server-Sent Events and HTTP range downloads |
 | Storage | Local or host-mounted files; no built-in SMB, FTP or WebDAV server |
 | Privacy | No telemetry, CDN or third-party account required |
-| Updates | Versioned releases; dependency and container vulnerability checks; updates require installation |
+| Updates | Versioned releases; dependency and container vulnerability checks; updates via Unraid or manual installation |
 
 All users share one file tree. Public links grant access without login. Media is not transcoded. Keep private configuration outside shared files, back up both directories and use one app process per configuration directory. Do not give untrusted host processes write access to this storage.
 

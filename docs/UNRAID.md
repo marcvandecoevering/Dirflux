@@ -2,54 +2,46 @@
 
 ## Through Apps
 
-When Dirflux appears in Community Applications, search for **Dirflux**, click **Install**, choose your files folder and host port, then click **Apply**. Open **WebUI** to finish setup. The template supplies the container settings below.
+Search for **Dirflux** in Apps and click **Install**. Choose your files folder, leave Appdata separate, and enter an **Initial administrator password** of at least 12 characters. Click **Apply**, open **WebUI**, and sign in as `admin` with that password.
 
-The central [Unraid catalog](https://github.com/marcvandecoevering/unraid-templates) is registered. Dirflux visibility in Apps has not yet been confirmed. If it is not available, use **Add Container** below; downloading an XML file is not required.
+New empty storage folders are prepared automatically. No XML download, console command or installation code is needed. If Dirflux is not yet visible in your Apps catalog, use **Add Container** below.
 
 ## Through Docker → Add Container
-
-Choose an empty template and enter:
 
 | Setting | Value |
 | --- | --- |
 | Name | `Dirflux` |
-| Repository (Docker image, not GitHub URL) | `ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2` |
-| Network type | `Bridge` |
-| Port mapping | Host `8094` → container `8094`, TCP; choose another host port if occupied |
-| Files path | Your files folder → `/files`, read/write |
+| Repository | `ghcr.io/marcvandecoevering/dirflux:beta` |
+| Network | `Bridge` |
+| Port | Host `8094` → container `8094`, TCP |
+| Files path | Your host folder → `/files`, read/write |
 | Appdata path | `/mnt/user/appdata/dirflux` → `/config`, read/write |
-| Console shell | `Shell` (`sh`) |
-| Privileged | Off |
+| Variable `INITIAL_ADMIN_PASSWORD` | Your chosen password, 12–1024 characters |
 
-In **Advanced View**, set **Extra Parameters** to:
+Click **Apply** and open `http://YOUR-SERVER:8094`. Sign in as `admin`. Use another host port if 8094 is already occupied. Privileged mode is not needed.
+
+The [Apps template](https://github.com/marcvandecoevering/unraid-templates/blob/main/templates/dirflux.xml) also supplies restricted container settings automatically. For the same restrictions in a manual installation, use Advanced View → Extra Parameters:
 
 ```text
---user=99:100 --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs=/tmp:rw,noexec,nosuid,size=64m
+--read-only --cap-drop=ALL --cap-add=CHOWN --cap-add=FOWNER --cap-add=DAC_OVERRIDE --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges --tmpfs=/tmp:rw,noexec,nosuid,size=64m
 ```
 
-No environment variables are required for ordinary use. The image already sets its listening address, port and internal storage paths. `PUID` and `PGID` variables are not supported by this version; `--user=99:100` selects the Unraid user instead.
+## Storage and accounts
 
-Click **Apply**, then open `http://YOUR-SERVER:8094` (or your chosen host port).
+Keep Files and Appdata separate, with neither inside the other. The initializer prepares only empty mount roots, then runs the app as `PUID=99` / `PGID=100`. Existing files and their permissions are preserved. When using an existing folder, the selected user must already have access. Set `PUID` and `PGID` only if your storage uses different numeric ownership.
 
-### Storage permissions in beta 2
+The initial password creates an account only on a new installation. Changing that variable later does not reset any password. It may be removed after setup; Docker settings remain visible to server administrators. Change account passwords inside Dirflux. Optional `INITIAL_ADMIN_NAME` changes the initial username.
 
-Both host folders must be writable by UID 99/GID 100. Keep `/config` separate from and outside the files folder. This image runs without root privileges and cannot repair root-owned folders that Docker may create for missing bind-mount paths. Prepare writable folders before starting; if startup fails with a permission error, check those two folders' ownership and permissions. Do not recursively change ownership of an existing share.
+## Updates
 
-## First administrator
+Use Unraid's normal **Check for Updates → Update** with the `beta` image tag. Back up both storage folders before updating. The beta channel advances only after release verification; versioned tags remain available for controlled deployments and rollback with matching backups.
 
-Open the container's **Console** and run:
+For an existing beta.2 installation, change **Repository** once from `ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2` to `ghcr.io/marcvandecoevering/dirflux:beta` and apply. Keep both storage paths. Your account and password stay valid; no initial-password variable is required for an existing account. Existing `--user=99:100` settings remain supported for already prepared folders.
 
-```sh
-cat /config/setup-token
-```
+## Optional settings
 
-Enter this one-time code in the WebUI and choose an administrator password of at least 12 characters. There is no default login. The code prevents another visitor from claiming a newly started installation and is removed after setup.
-
-## Optional settings and updates
-
-- `READ_ONLY=true` disables file changes. You may also mount `/files` read-only; `/config` must stay writable.
-- For remote access, use an HTTPS reverse proxy and set `COOKIE_SECURE=true`. Leave it unset for HTTP access on your LAN.
-- All accounts share the files exposed through `/files`; mount only what you intend to manage.
-- Before updating, stop Dirflux and back up both folders. This beta uses a fixed image tag: change **Repository** to the new release's tag and apply, preserving the paths. Checking for image updates alone does not change a fixed version tag.
+- `READ_ONLY=true` disables file changes. `/files` can also be mounted read-only; `/config` must remain writable.
+- Use an HTTPS proxy for remote access and set `COOKIE_SECURE=true`. Leave it unset for LAN HTTP access.
+- All accounts share the files mounted at `/files`.
 
 [Configuration](OPERATIONS.md) · [Releases](https://github.com/marcvandecoevering/Dirflux/releases) · [Support](https://github.com/marcvandecoevering/Dirflux/issues)

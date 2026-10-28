@@ -1,5 +1,17 @@
 # Unraid publication preparation
 
+## Beta.4 installation (2026-10-28)
+
+[Release verification](https://github.com/marcvandecoevering/Dirflux/actions/runs/40675718835) passed for native Windows/macOS/Linux and both container architectures. Both OS/package scans reported zero findings. The beta channel and versioned beta.4 image reference the same verified index: `sha256:fefcad83f20996c94c284b20217c458449a472aec1cbd258543a0311d20e3bcc`.
+
+The automated upgrade test creates a real beta.2 account, replaces the container with beta.4 and verifies the original login, file contents and ownership. The new initial-password setting never resets the old password. Fresh installation tests cover root-owned empty storage and an empty configuration directory already owned by UID 99, and verify a non-root server with zero effective capabilities.
+
+On Unraid 7.3.3, a fresh manual **Add Container** installation pulled the public `beta` image, created previously nonexistent Files/Appdata folders automatically, and accepted direct `admin` login with the password entered in the Unraid form. No folder preparation, XML import or console setup-token retrieval was used. Upload/download preserved exact bytes.
+
+The final beta.4 installation also verified configuration ownership/mode `99:100:700`, both application processes running as `nobody`, and zero effective capabilities. After a container restart, the original login and exact uploaded bytes remained intact.
+
+The current template uses the beta update channel, `INITIAL_ADMIN_PASSWORD`, and optional PUID/PGID. It grants limited initialization capabilities, prepares empty mount roots only, and drops privileges before running the app. Earlier beta.2 deployment descriptions below are historical.
+
 ## Central catalog migration (2026-10-28)
 
 The canonical template repository is now [unraid-templates](https://github.com/marcvandecoevering/unraid-templates), containing Dirflux and ThuisWeb. The existing approved Community Applications registration was updated through **My submissions → Edit details → Repository URL**. Its display name and approval status remain unchanged. No second registration was submitted.
