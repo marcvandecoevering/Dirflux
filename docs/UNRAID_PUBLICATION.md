@@ -1,5 +1,15 @@
 # Unraid publication preparation
 
+## Central catalog migration (2026-10-28)
+
+The canonical template repository is now [unraid-templates](https://github.com/marcvandecoevering/unraid-templates), containing Dirflux and ThuisWeb. The existing approved Community Applications registration was updated through **My submissions → Edit details → Repository URL**. Its display name and approval status remain unchanged. No second registration was submitted.
+
+The central repository passed validation with two valid Docker templates, no hard errors or template warnings, and both images pullable. Before migration the scan identified ThuisWeb as an existing app, as expected; updating the existing registration avoids submitting that app a second time. The portal says changes appear after the next catalog build. At the time of the source change it showed zero apps under the new URL; public catalog propagation is not yet verified.
+
+Application repositories, images, app names and container settings remain separate and unchanged. Only template locations changed. Old template files remain available for installed clients. Maintain templates in the central catalog and synchronize compatibility copies in the application repositories. The Dirflux generator's `templateRepository` setting points at the central catalog; its generated app-specific profile must not replace the shared catalog profile.
+
+The sections below record the earlier standalone Dirflux preparation; do not submit that standalone repository.
+
 Status (2026-10-28): beta release and public multiarchitecture image verified;
 installed and tested on Unraid 7.3.3. Not submitted or listed in Apps.
 Authenticated **Validate and Scan** passed on 2026-10-28 for repository revision

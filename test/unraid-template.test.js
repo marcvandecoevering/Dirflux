@@ -5,6 +5,14 @@ import {renderUnraid} from '../scripts/unraid-template.js';
 // Synthetic metadata only: these are not advertised as published destinations.
 const metadata={name:'Example & files',slug:'example-files',project:'https://github.com/example/example-files',image:'ghcr.io/example/example-files:0.1.0-beta.1',icon:'https://example.invalid/icon.png'};
 
+test('central catalog changes only template location, preserving application links',()=>{
+  const {template}=renderUnraid({...metadata,templateRepository:'https://github.com/example/unraid-templates'});
+  assert.ok(template.includes('<TemplateURL>https://raw.githubusercontent.com/example/unraid-templates/main/templates/example-files.xml</TemplateURL>'));
+  assert.ok(template.includes('<Project>https://github.com/example/example-files</Project>'));
+  assert.ok(template.includes('<Support>https://github.com/example/example-files/issues</Support>'));
+  assert.throws(()=>renderUnraid({...metadata,templateRepository:'https://github.com:8443/example/templates'}),/canonical/);
+});
+
 test('Unraid generator rejects a slug whose default host mounts would overlap',()=>{
   assert.throws(()=>renderUnraid({...metadata,slug:'appdata'}),/overlap/);
 });

@@ -4,7 +4,7 @@ Dirflux is currently a beta. Community Applications submission is being prepared
 
 ## Install before the Apps listing
 
-1. Download [dirflux.xml](https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/templates/dirflux.xml) to `/boot/config/plugins/dockerMan/templates-user/my-Dirflux.xml` on your Unraid server.
+1. Download [dirflux.xml](https://raw.githubusercontent.com/marcvandecoevering/unraid-templates/main/templates/dirflux.xml) to `/boot/config/plugins/dockerMan/templates-user/my-Dirflux.xml` on your Unraid server.
 2. Create separate Files and Appdata directories writable by UID 99/GID 100. Use dedicated folders; never recursively change ownership of an existing share.
 3. Open **Docker → Add Container**, select **Dirflux**, check both paths and choose a free host port (default `8094`). Click **Apply**.
 4. Open the container console and run `cat /config/setup-token`. Open **WebUI** and use that code to create your administrator account.

@@ -8,7 +8,7 @@ function httpsUrl(value) {
   if(url.protocol!=='https:'||url.username||url.password)throw new Error('Public metadata URLs must use HTTPS without credentials.');
   return url;
 }
-export function renderUnraid({name,slug,project,image,icon,branch='main'}) {
+export function renderUnraid({name,slug,project,image,icon,branch='main',templateRepository=project}) {
   if(typeof name!=='string'||!name.trim()||name.length>64||/[\x00-\x1f]/.test(name))throw new Error('Provide a display name.');
   if(typeof slug!=='string'||!/^[a-z][a-z0-9-]{1,47}$/.test(slug))throw new Error('Provide a lowercase application slug.');
   if(slug==='appdata')throw new Error('The appdata slug would overlap the default Files and Appdata folders.');
@@ -18,6 +18,9 @@ export function renderUnraid({name,slug,project,image,icon,branch='main'}) {
   if(typeof image!=='string'||!/^ghcr\.io\/[a-z0-9_.-]+\/[a-z0-9_.-]+:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(image))throw new Error('Provide a tagged GHCR image.');
   httpsUrl(icon);
   const repo=projectUrl.pathname.replace(/\/$/,'');
+  const templateRepoUrl=httpsUrl(templateRepository);
+  if(templateRepoUrl.hostname!=='github.com'||templateRepoUrl.port||!/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/.test(templateRepoUrl.pathname)||templateRepoUrl.search||templateRepoUrl.hash)throw new Error('Template repository must be the canonical GitHub repository URL.');
+  const templateRaw=`https://raw.githubusercontent.com${templateRepoUrl.pathname.replace(/\/$/,'')}/${branch}`;
   const source='https://github.com'+repo,raw=`https://raw.githubusercontent.com${repo}/${branch}`;
   const config=(label,target,defaultValue,type,mode,description,display='always')=>
     `  <Config Name="${xml(label)}" Target="${xml(target)}" Default="${xml(defaultValue)}" Mode="${xml(mode)}" Description="${xml(description)}" Type="${type}" Display="${display}" Required="true" Mask="false"/>`;
@@ -33,7 +36,7 @@ export function renderUnraid({name,slug,project,image,icon,branch='main'}) {
   <Icon>${xml(icon)}</Icon>
   <Project>${xml(source)}</Project>
   <Support>${xml(source+'/issues')}</Support>
-  <TemplateURL>${xml(raw+'/templates/'+slug+'.xml')}</TemplateURL>
+  <TemplateURL>${xml(templateRaw+'/templates/'+slug+'.xml')}</TemplateURL>
   <ReadMe>${xml(raw+'/README.md')}</ReadMe>
   <Category>Tools:System</Category>
   <License>BSD-2-Clause</License>

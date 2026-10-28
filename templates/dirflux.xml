@@ -10,7 +10,7 @@
   <Icon>https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/public/brand/dirflux-512.png</Icon>
   <Project>https://github.com/marcvandecoevering/Dirflux</Project>
   <Support>https://github.com/marcvandecoevering/Dirflux/issues</Support>
-  <TemplateURL>https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/templates/dirflux.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/marcvandecoevering/unraid-templates/main/templates/dirflux.xml</TemplateURL>
   <ReadMe>https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/README.md</ReadMe>
   <Category>Tools:System</Category>
   <License>BSD-2-Clause</License>
