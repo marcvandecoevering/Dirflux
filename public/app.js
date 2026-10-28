@@ -22,6 +22,7 @@ let uploadConflictQueue = Promise.resolve();
 let nativeFullscreenPane = null;
 let videoPlayback = null, imageViewer = null, imageFitMode = 'fit';
 let editorInstance = null, currentMedia = null, clipboard = null, audioItems = [], audioIndex = 0, eventSource = null;
+let stopAudio = () => {};
 const defaultPrefs = { theme:'droppy',editorFontSize:16,indentWithTabs:false,indentUnit:4,lineWrapping:false,loop:true,autonext:false,sharelinkDownload:true };
 let prefs;
 function readPreferences() {
@@ -400,7 +401,8 @@ function playAudio(item,index) {
     toast('Dit nummer kan niet worden afgespeeld. Het volgende wordt geprobeerd.',true);
     audioIndex=following;start();
   };
-  $('#audio-stop').onclick=()=>{stopped=true;generation++;player.onended=player.onplaying=player.onerror=null;player.pause();player.removeAttribute('src');player.load();bar.remove();$('#shell').classList.remove('has-audio');};start();
+  stopAudio=()=>{stopped=true;generation++;player.onended=player.onplaying=player.onerror=null;player.pause();player.removeAttribute('src');player.load();bar.remove();$('#shell').classList.remove('has-audio');audioItems=[];audioIndex=0;stopAudio=()=>{};};
+  $('#audio-stop').onclick=()=>stopAudio();start();
 }
 async function trashItems(items) {
   return formDialog('Naar de prullenbak', '', 'Verplaatsen naar prullenbak', async () => {
@@ -615,6 +617,7 @@ async function init() {
   $('#auth').hidden = !!state.user; $('#shell').hidden = !state.user;
   document.body.classList.toggle('read-only', !!state.user && !canWrite());
   if (!state.user) {
+    stopAudio(); clipboard=null;
     for(const job of uploadJobs)job.cancel();
     eventSource?.close();eventSource=null;
     if(!$('.auth-bottom')) {const bottom=document.createElement('div');bottom.className='auth-bottom';bottom.innerHTML='<input type="checkbox" id="remember-me" checked aria-label="Remember Me"><span>Remember Me</span>';$('#login-form').append(bottom);}
@@ -648,7 +651,7 @@ on($('#login-form'), 'submit', async e => {
   catch (error) { $('#auth-error').textContent = error.message; }
   finally { $('#login-button').disabled = false; }
 });
-on($('#logout'), 'click', () => changeView(async () => { if(!await confirmCloseFrames())return; const wasGuest=state.user?.guest; for(const pane of $$('.pane.is-fullscreen'))await leavePaneFullscreen(pane); await api('/logout', { method:'POST' }); $('#panes').replaceChildren(); if(wasGuest){location.href='/?login=1';return;} state.user = null; state.panes = [{ path:'', items:[], selected:new Set(), sort:'name' }]; state.active = 0; await init(); }));
+on($('#logout'), 'click', () => changeView(async () => { if(!await confirmCloseFrames())return; const wasGuest=state.user?.guest; for(const pane of $$('.pane.is-fullscreen'))await leavePaneFullscreen(pane); await api('/logout', { method:'POST' }); stopAudio(); clipboard=null; $('#panes').replaceChildren(); if(wasGuest){location.href='/?login=1';return;} state.user = null; state.panes = [{ path:'', items:[], selected:new Set(), sort:'name' }]; state.active = 0; await init(); }));
 on($('#refresh'), 'click', () => refreshAll());
 on($('#new-folder'), 'click', () => create(true)); on($('#new-file'), 'click', () => create(false));
 $('#upload-button').onclick = () => $('#file-input').click(); $('#upload-folder').onclick = () => $('#folder-input').click();
