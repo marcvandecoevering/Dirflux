@@ -8,7 +8,7 @@ The implementation uses Node.js 24, Express, SQLite, CodeMirror 6 and PDF.js. Br
 
 [Functional comparison and release gates](docs/PARITY.md) records the reference behavior, available evidence and outstanding work. Existing droppy users, credentials, files, links and configuration do not need migration and are not imported. The new UI may differ visually while preserving the original capabilities.
 
-Current verification on Windows: 22 automated tests pass, upload replace/keep-both flows were checked in a browser, and the native release archive starts after a clean production-only installation. GitHub CI is configured for Windows, Linux and macOS, plus a restricted Linux container test; these workflows have **not yet run on GitHub**. The local Docker engine is unavailable, so container support is not yet verified.
+Current verification on Windows: 38 automated tests pass. Browser checks cover upload replace/keep-both flows and concurrent uploads with independent cancellation. The native release archive passes production-only installation, switching installation directories with persistent data, and restoring a consistent backup into separate storage. Both installations use the current build; cross-version migrations are not verified. GitHub CI is configured for Windows, Linux and macOS, plus a restricted Linux container test; these workflows have **not yet run on GitHub**. The local Docker engine is unavailable, so container support is not yet verified.
 
 ## Run from source
 
@@ -43,6 +43,8 @@ npm start
 ```
 
 Only production dependencies are needed; the editor and PDF assets have already been built. Keep `FILES_DIR` and `CONFIG_DIR` outside versioned application directories when deploying updates. No stable downloadable release has been published yet.
+
+Follow the [native installation, update and recovery procedure](docs/NATIVE_DEPLOYMENT.md) for persistent paths, stopped-state backups, installation switching and restoring a previous snapshot.
 
 ## Docker (under validation)
 
