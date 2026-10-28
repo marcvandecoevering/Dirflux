@@ -87,6 +87,8 @@ The manual **Release candidate** GitHub workflow requires an existing `v<package
 
 Before a public release, finalize the name/logo and repository metadata, inspect the candidate and verification results, publish versioned multi-architecture images, verify their published digests and anonymous visibility, and attach the native archive/checksums to the reviewed GitHub Release. Registry publication, release creation, and Unraid validation/submission are still outstanding; the candidate workflow does not perform those steps. GitHub's [reusable workflow documentation](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows) describes how the verification workflow is called. The workflows pass local actionlint validation but have not yet run on GitHub.
 
+Local candidate verification at revision `efd19cc` produced the real native archive and independently matched its SHA-256 against both `release.json` and `SHA256SUMS`. The recorded commit matched Git HEAD. Reusing the output directory was rejected without changing its archive; mismatched version tags and dirty source checkouts were also rejected. This verifies local candidate assembly and guardrails, not the unexecuted GitHub workflow or a public release.
+
 ## Recovery after a failed update
 
 Stop the new application and retain its current storage directories for investigation. If release notes explicitly permit switching back without a data restore, follow those instructions. Otherwise, do not point an older executable at a database a newer release may have migrated.
