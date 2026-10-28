@@ -79,6 +79,14 @@ The unit uses [systemd execution restrictions](https://www.freedesktop.org/softw
 
 The app does not replace its own code automatically. Repository dependency checks and update PRs support maintenance, but updates must be reviewed, tested and released before users install them.
 
+## Preparing a release candidate
+
+From a clean checkout, `npm run candidate -- /absolute/new/output-directory` rebuilds browser assets, packs the actual current source, and writes the native archive, `SHA256SUMS` and `release.json` into a new directory. The metadata records the exact Git revision, version, archive name and digest. Existing output directories and dirty source checkouts are rejected. This command creates a local candidate; it does not claim the complete test suite has run, publish anything, or select the final app identity. SHA-256 checksums detect changed bytes and are not digital signatures.
+
+The manual **Release candidate** GitHub workflow requires an existing `v<package-version>` tag. It resolves the tag to a commit, runs the reusable verification workflow on that exact commit across its configured native/container jobs, and only then builds and uploads the checksummed candidate. The final packaging step verifies the tag still identifies the checked-out commit, so moving a tag during the run fails instead of silently packaging a different revision. All jobs use read-only repository permissions. Candidate artifacts are retained for 30 days and are not a public GitHub Release or an Unraid package.
+
+Before a public release, finalize the name/logo and repository metadata, inspect the candidate and verification results, publish versioned multi-architecture images, verify their published digests and anonymous visibility, and attach the native archive/checksums to the reviewed GitHub Release. Registry publication, release creation, and Unraid validation/submission are still outstanding; the candidate workflow does not perform those steps. GitHub's [reusable workflow documentation](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows) describes how the verification workflow is called. The workflows pass local actionlint validation but have not yet run on GitHub.
+
 ## Recovery after a failed update
 
 Stop the new application and retain its current storage directories for investigation. If release notes explicitly permit switching back without a data restore, follow those instructions. Otherwise, do not point an older executable at a database a newer release may have migrated.

@@ -1,0 +1,73 @@
+name: Release candidate
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag, such as v0.1.0-beta.1
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release-candidate-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  resolve:
+    runs-on: ubuntu-24.04
+    outputs:
+      revision: ${{ steps.source.outputs.revision }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - id: source
+        name: Require a matching existing version tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import {execFileSync} from 'node:child_process';
+          const tag=process.env.RELEASE_TAG;
+          const manifest=JSON.parse(fs.readFileSync('package.json','utf8'));
+          if(!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(tag)||tag!=='v'+manifest.version)throw new Error('Tag/version mismatch');
+          const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();
+          const revision=git('rev-parse','HEAD');
+          if(git('rev-parse',`refs/tags/${tag}^{commit}`)!==revision)throw new Error('Not the requested tag');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,`revision=${revision}\n`);
+          NODE
+  verify:
+    needs: resolve
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.resolve.outputs.revision }}
+  package:
+    needs: [resolve, verify]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.revision }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:package
+      - name: Assemble checksummed candidate
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: npm run candidate -- "$RUNNER_TEMP/release-candidate"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-candidate-${{ inputs.tag }}
+          path: ${{ runner.temp }}/release-candidate/
+          if-no-files-found: error
+          retention-days: 30

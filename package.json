@@ -32,6 +32,7 @@
     "test": "node --test",
     "test:package": "node scripts/native-smoke.js",
     "package": "npm run build && node scripts/package.js",
+    "candidate": "npm run build && node scripts/release-candidate.js",
     "check": "node --check server.js && node --check public/app.js",
     "build": "node scripts/assets.js",
     "prestart": "node scripts/ensure-assets.js",

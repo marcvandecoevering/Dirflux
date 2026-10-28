@@ -18,6 +18,8 @@ A useful report includes the affected version, minimal reproduction with synthet
 
 Dependabot is configured for weekly version-update pull requests. GitHub dependency graph, Dependabot alerts/security updates, private reporting and branch protection still need to be enabled and verified on the actual repository. CI permissions are read-only; update pull requests are not automatically merged or released.
 
+The manual release-candidate workflow resolves an existing version tag to an exact commit, runs the verification workflow on it, and creates a checksummed native candidate only after those jobs pass. Packaging verifies that the tag still points to the selected commit. It does not publish releases or images. Candidate metadata and SHA-256 checksums provide traceability and integrity checks, not a signature or a promise of security support.
+
 ## Deployment boundary
 
 Run a single application process as a non-root user with access only to its own files and configuration. Protect configuration and backup directories from other users. Shared links deliberately grant unauthenticated access to the linked content. Users share a common file tree rather than isolated home directories.
