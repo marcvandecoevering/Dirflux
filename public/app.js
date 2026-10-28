@@ -758,6 +758,14 @@ on(document,'keydown',async e=>{
   if(e.key==='Backspace'){e.preventDefault();await navigate(state.active,parent(active().path));}
 });
 window.addEventListener('beforeunload', e => { if (state.dirty || state.uploading) { e.preventDefault(); e.returnValue = ''; } });
+for(const [event,operation] of [['copy','copy'],['cut','move']])on(document,event,e=>{
+  if(e.defaultPrevented||!state.user||$('#dialog').open||e.target.closest('input,textarea,select,[contenteditable]')||window.getSelection()?.toString())return;
+  const items=active().items.filter(item=>active().selected.has(item.path));
+  if(!items.length)return;
+  e.preventDefault();
+  e.clipboardData?.setData('text/plain',items.map(item=>item.path).join('\n'));
+  clipboard={items,operation};renderPanes();
+});
 on(document, 'paste', async e => {
   if (!state.user || !canWrite() || e.target.closest('input,textarea,[contenteditable]') || $('#dialog').open) return;
   if(clipboard){e.preventDefault();return pasteFiles(active().path);}
