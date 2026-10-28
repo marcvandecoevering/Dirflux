@@ -108,6 +108,11 @@ jobs:
       - name: Export the tested image without rebuilding
         if: ${{ inputs.export_images }}
         run: node scripts/container-candidate.js local/file-app-ci "$RUNNER_TEMP/container-candidate"
+      - name: Verify and reload the exported image
+        if: ${{ inputs.export_images }}
+        env:
+          IMAGE_PLATFORM: ${{ matrix.os == 'ubuntu-24.04-arm' && 'linux/arm64' || 'linux/amd64' }}
+        run: RELEASE_REVISION="$(git rev-parse HEAD)" node scripts/load-container-candidate.js "$RUNNER_TEMP/container-candidate"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ inputs.export_images }}
         with:
