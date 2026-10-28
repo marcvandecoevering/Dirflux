@@ -13,6 +13,7 @@ import { createMoveJournal } from './lib/moves.js';
 import { sendOpenedFile } from './lib/download.js';
 import picomatch from 'picomatch';
 import {createServer} from 'node:http';
+import {readLimitedHandle,readLimitedFile} from './lib/read-limited.js';
 
 const scrypt = promisify(crypto.scrypt);
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -260,9 +261,10 @@ export async function createApp(options = {}) {
         const ext=path.extname(absolute).toLowerCase();
         inline=['.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac','.pdf'].includes(ext);
         if(!inline&&(await handle.stat()).size<2*1024**2) {
-          const bytes=await handle.readFile();
+          let bytes;
+          try {bytes=await readLimitedHandle(handle,2*1024**2);} catch(error) {if(error.status!==413)throw error;}
           assertCurrent();
-          if(!bytes.includes(0))return res.type('text/plain').send(bytes);
+          if(bytes&&!bytes.includes(0))return res.type('text/plain').send(bytes);
         }
       }
       assertCurrent();
@@ -399,9 +401,7 @@ export async function createApp(options = {}) {
   app.get('/api/zip', async (req, res) => { const { relative } = await resolve(req.query.path || ''); await zip(relative, res); });
   app.get('/api/text', async (req, res) => {
     const { absolute } = await resolve(req.query.path);
-    const st = await fsp.stat(absolute);
-    if (!st.isFile() || st.size > maxText) throw fail(413, `De teksteditor ondersteunt bestanden tot ${maxText} bytes.`);
-    const bytes = await fsp.readFile(absolute);
+    const bytes = await readLimitedFile(absolute,maxText);
     if (bytes.includes(0)) throw fail(415, 'Dit is een binair bestand. Download het om te openen.');
     let text; try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { throw fail(415, 'Alleen UTF-8-tekst kan worden bewerkt.'); }
     res.json({ text, version: hash(bytes) });
@@ -409,8 +409,7 @@ export async function createApp(options = {}) {
   write.post('/api/text', writable, async (req, res) => {
     const { absolute } = await resolve(req.body.path);
     if (typeof req.body.text !== 'string' || Buffer.byteLength(req.body.text) > maxText) throw fail(413, `Maximaal ${maxText} bytes tekst.`);
-    if ((await fsp.stat(absolute)).size > maxText) throw fail(413, 'Het bestand is groter dan de ingestelde tekstlimiet.');
-    if (hash(await fsp.readFile(absolute)) !== req.body.version) throw fail(409, 'Het bestand is ondertussen gewijzigd. Open het opnieuw voordat je opslaat.');
+    if (hash(await readLimitedFile(absolute,maxText)) !== req.body.version) throw fail(409, 'Het bestand is ondertussen gewijzigd. Open het opnieuw voordat je opslaat.');
     const temp = path.join(path.dirname(absolute), '.app-tmp-' + crypto.randomUUID());
     try {
       await fsp.writeFile(temp, req.body.text, { flag: 'wx', mode: (await fsp.stat(absolute)).mode });
