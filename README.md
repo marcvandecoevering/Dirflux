@@ -152,3 +152,5 @@ Dependabot configuration checks npm dependencies, the Docker base image and GitH
 New code is BSD-2-Clause licensed. The current prototype still uses droppy's original visual assets under their original licenses; its name/logo will be replaced before publication. Third-party licensing is documented in `THIRD_PARTY_NOTICES.md` and `LICENSE.droppy`.
 
 Original reference: https://github.com/silverwind/droppy
+
+The dedicated `scripts/large-archive-smoke.js` check runs inside Linux with sparse temporary storage. It downloads and fully verifies a ZIP64 entry larger than 4 GiB, including all uncompressed bytes and CRC. It is included in container CI. The synthetic data compresses to about 4 MiB; this is not a test of a compressed archive larger than 4 GiB or more than 65,535 entries.

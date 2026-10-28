@@ -57,3 +57,9 @@ jobs:
           --mount "type=bind,src=${{ github.workspace }}/scripts,dst=/app/scripts,readonly"
           --entrypoint node local/file-app-ci --test
       - run: node scripts/container-smoke.js local/file-app-ci
+      - name: Verify ZIP64 content above 4 GiB
+        run: >-
+          docker run --rm --read-only --cap-drop=ALL --security-opt no-new-privileges
+          --tmpfs /tmp:rw,noexec,nosuid,size=128m
+          --mount "type=bind,src=${{ github.workspace }}/scripts,dst=/app/scripts,readonly"
+          --entrypoint node local/file-app-ci scripts/large-archive-smoke.js
