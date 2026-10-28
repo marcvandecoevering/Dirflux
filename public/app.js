@@ -437,10 +437,13 @@ async function pasteFiles(destination) {
 }
 async function openPdf(item) {
   showDialog(item.name,'<div class="pdf-scroll"><canvas id="pdf-canvas" aria-label="PDF page"></canvas></div><div class="preview-controls"><button class="secondary" id="pdf-prev">←</button><span class="pdf-info" id="pdf-info">Loading PDF…</span><button class="secondary" id="pdf-next">→</button><button class="secondary" id="pdf-out">−</button><button class="secondary" id="pdf-in">+</button><button class="secondary" id="pdf-download">Download</button></div>','preview-dialog');
+  const controller=new AbortController(),canvas=$('#pdf-canvas'),info=$('#pdf-info'),previous=$('#pdf-prev'),next=$('#pdf-next'),zoomIn=$('#pdf-in'),zoomOut=$('#pdf-out'),downloadButton=$('#pdf-download');
+  closeHook=()=>{controller.abort();return true;};
   const extras=await import('/vendor/extras.js');
-  const viewer=await extras.pdf('/api/pdf?path='+encodeURIComponent(item.path),$('#pdf-canvas'),({page,total,scale})=>{if(!$('#pdf-info'))return;$('#pdf-info').textContent=`${page} / ${total} · ${Math.round(scale*100)}%`;$('#pdf-prev').disabled=page===1;$('#pdf-next').disabled=page===total;});
-  closeHook=()=>{viewer.destroy();return true;};
-  on($('#pdf-prev'),'click',viewer.previous);on($('#pdf-next'),'click',viewer.next);on($('#pdf-in'),'click',()=>viewer.zoom(1.2));on($('#pdf-out'),'click',()=>viewer.zoom(1/1.2));$('#pdf-download').onclick=()=>download(item);
+  if(controller.signal.aborted||!canvas.isConnected)return;
+  const viewer=await extras.pdf('/api/pdf?path='+encodeURIComponent(item.path),canvas,({page,total,scale})=>{if(controller.signal.aborted||!canvas.isConnected)return;info.textContent=`${page} / ${total} · ${Math.round(scale*100)}%`;previous.disabled=page===1;next.disabled=page===total;},controller.signal);
+  if(!viewer||controller.signal.aborted||!canvas.isConnected){viewer?.destroy();return;}
+  on(previous,'click',viewer.previous);on(next,'click',viewer.next);on(zoomIn,'click',()=>viewer.zoom(1.2));on(zoomOut,'click',()=>viewer.zoom(1/1.2));downloadButton.onclick=()=>download(item);
 }
 function playAudio(item,index) {
   audioItems=state.panes[index].items.filter(isAudio);audioIndex=audioItems.findIndex(i=>i.path===item.path);

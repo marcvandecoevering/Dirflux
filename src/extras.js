@@ -1,4 +1,5 @@
 import { basicSetup } from 'codemirror';
+import {createPdfRenderer} from '../public/pdf-renderer.js';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
 import { indentUnit } from '@codemirror/language';
@@ -34,19 +35,18 @@ export async function editor(parent, text, filename, prefs, readOnly, onChange, 
     modeName:description?.name || 'Plain text'
   };
 }
-export async function pdf(url, canvas, onInfo) {
+export async function pdf(url, canvas, onInfo, signal) {
   pdfjs.GlobalWorkerOptions.workerSrc='/vendor/pdf.worker.min.mjs';
   const loading=pdfjs.getDocument({url,isEvalSupported:false,useWasm:false,wasmUrl:'/vendor/wasm/',iccUrl:'/vendor/iccs/',cMapUrl:'/vendor/cmaps/',cMapPacked:true,standardFontDataUrl:'/vendor/standard_fonts/'});
-  const document=await loading.promise;
-  let page=1,scale=1.3,renderTask=null;
-  async function render() {
-    if(renderTask){renderTask.cancel();try{await renderTask.promise;}catch{}}
-    const current=await document.getPage(page), viewport=current.getViewport({scale});
-    canvas.width=viewport.width;canvas.height=viewport.height;
-    renderTask=current.render({canvasContext:canvas.getContext('2d'),viewport});
-    try{await renderTask.promise;}catch(e){if(e.name!=='RenderingCancelledException')throw e;}
-    onInfo({page,total:document.numPages,scale});
-  }
-  await render();
-  return {previous:async()=>{page=Math.max(1,page-1);await render();},next:async()=>{page=Math.min(document.numPages,page+1);await render();},zoom:async factor=>{scale=Math.max(.4,Math.min(3,scale*factor));await render();},destroy:()=>loading.destroy()};
+  let viewer,destroyed=false;
+  const destroy=()=>{if(destroyed)return;destroyed=true;signal?.removeEventListener('abort',destroy);viewer?.destroy();void loading.destroy().catch(()=>{});};
+  signal?.addEventListener('abort',destroy,{once:true});
+  if(signal?.aborted)destroy();
+  try {
+    const document=await loading.promise;
+    if(destroyed)return null;
+    viewer=createPdfRenderer(document,canvas,onInfo);
+    await viewer.render();
+    return destroyed?null:{...viewer,destroy};
+  } catch(error) {destroy();if(signal?.aborted)return null;throw error;}
 }
