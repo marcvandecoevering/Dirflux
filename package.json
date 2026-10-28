@@ -1,5 +1,5 @@
 {
-  "name": "droppy-next",
+  "name": "dirflux",
   "version": "0.1.0",
   "private": true,
   "license": "BSD-2-Clause",
@@ -53,5 +53,13 @@
     "codemirror": "6.0.2",
     "esbuild": "0.28.2",
     "pdfjs-dist": "6.4.299"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marcvandecoevering/Dirflux.git"
+  },
+  "homepage": "https://github.com/marcvandecoevering/Dirflux#readme",
+  "bugs": {
+    "url": "https://github.com/marcvandecoevering/Dirflux/issues"
   }
 }

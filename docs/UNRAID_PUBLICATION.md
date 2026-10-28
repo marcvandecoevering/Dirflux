@@ -1,8 +1,9 @@
 # Unraid publication preparation
 
 Status: not submitted, not listed, and not yet installed on an actual Unraid
-server. The final name, own logo, public GitHub repository and published image
-are still required. Generated files are beta metadata, not approval evidence.
+server. The selected name and logo are Dirflux, and the source repository is
+https://github.com/marcvandecoevering/Dirflux. A verified published container image
+and actual Unraid installation checks are still required. Generated files are beta metadata, not approval evidence.
 
 The [current submission guide](https://ca.unraid.net/submit/help) requires a
 public active repository, an OSI-approved root license, a root `ca_profile.xml`

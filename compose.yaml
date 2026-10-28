@@ -1,7 +1,7 @@
 services:
-  droppy-next:
+  dirflux:
     build: .
-    container_name: droppy-next
+    container_name: dirflux
     restart: unless-stopped
     init: true
     ports:

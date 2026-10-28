@@ -5,13 +5,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { samplePdf, sampleWav } from './fixtures.js';
 
-const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'droppy-next-demo-'));
+const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'dirflux-demo-'));
 const instance = await createApp({ files:path.join(temporary,'files'), config:path.join(temporary,'config') });
 for (const folder of ['Documenten', 'Foto’s', 'Projecten', 'Gedeeld']) await fs.mkdir(path.join(instance.root,folder));
-await fs.writeFile(path.join(instance.root,'Welkom.txt'), 'Welkom bij Droppy Next.\n\nDit zijn tijdelijke demonstratiebestanden.\nJe eigen bestanden blijven ongemoeid.\n');
+await fs.writeFile(path.join(instance.root,'Welkom.txt'), 'Welkom bij Dirflux.\n\nDit zijn tijdelijke demonstratiebestanden.\nJe eigen bestanden blijven ongemoeid.\n');
 await fs.writeFile(path.join(instance.root,'Documenten','Notities.txt'), 'Mijn notities\n\nEen nieuwe plek voor bestanden.\n');
 await fs.writeFile(path.join(instance.root,'Documenten','Windows.txt'), '\uFEFFEerste regel\r\nTweede regel\r\n');
-await fs.writeFile(path.join(instance.root,'Projecten','instellingen.json'), JSON.stringify({ project:'Droppy Next', status:'demo' },null,2));
+await fs.writeFile(path.join(instance.root,'Projecten','instellingen.json'), JSON.stringify({ project:'Dirflux', status:'demo' },null,2));
 await fs.writeFile(path.join(instance.root,'Documenten','Voorbeeld.pdf'),samplePdf());
 await fs.copyFile(path.resolve(import.meta.dirname,'../test/fixtures/pdf/jpeg2000.pdf'),path.join(instance.root,'Documenten','JPEG2000.pdf'));
 await fs.writeFile(path.join(instance.root,'Geluidstest.wav'),sampleWav());
