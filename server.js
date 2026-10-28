@@ -406,8 +406,12 @@ export async function createApp(options = {}) {
     const current = await scrypt(currentPassword, req.auth.salt, 64);
     if (!crypto.timingSafeEqual(current, Buffer.from(req.auth.digest, 'hex'))) throw fail(403, 'Je huidige wachtwoord klopt niet.');
     const salt = token(), digest = (await scrypt(password, salt, 64)).toString('hex');
-    db.prepare('UPDATE users SET salt=?,digest=? WHERE id=?').run(salt, digest, req.auth.id);
-    db.prepare('DELETE FROM sessions WHERE user_id=?').run(req.auth.id);
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare('UPDATE users SET salt=?,digest=? WHERE id=?').run(salt, digest, req.auth.id);
+      db.prepare('DELETE FROM sessions WHERE user_id=?').run(req.auth.id);
+      db.exec('COMMIT');
+    } catch(error) {db.exec('ROLLBACK');throw error;}
     res.json(session(res, req.auth));
   });
   app.get('/api/files', async (req, res) => {
@@ -686,9 +690,14 @@ export async function createApp(options = {}) {
   });
   write.delete('/api/users/:id', admin, (req, res) => {
     if (req.params.id === req.auth.id) throw fail(400, 'Je kunt je eigen account niet verwijderen.');
-    db.prepare('DELETE FROM sessions WHERE user_id=?').run(req.params.id);
-    db.prepare('DELETE FROM shares WHERE owner=?').run(req.params.id);
-    db.prepare('DELETE FROM users WHERE id=?').run(req.params.id); res.json({ ok: true });
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      db.prepare('DELETE FROM sessions WHERE user_id=?').run(req.params.id);
+      db.prepare('DELETE FROM shares WHERE owner=?').run(req.params.id);
+      db.prepare('DELETE FROM users WHERE id=?').run(req.params.id);
+      db.exec('COMMIT');
+    } catch(error) {db.exec('ROLLBACK');throw error;}
+    res.json({ ok: true });
   });
   app.use('/api', (_req, _res, next) => next(fail(404, 'Onbekend API-adres.')));
   app.use(express.static(path.join(here, 'public'), { etag: true, maxAge: 0 }));
