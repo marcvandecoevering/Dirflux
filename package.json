@@ -16,6 +16,7 @@
     "LICENSE.droppy",
     "THIRD_PARTY_NOTICES.md",
     "docs/",
+    "deploy/",
     "Dockerfile",
     "compose.yaml",
     ".env.example"

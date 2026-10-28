@@ -154,3 +154,18 @@ New code is BSD-2-Clause licensed. The current prototype still uses droppy's ori
 Original reference: https://github.com/silverwind/droppy
 
 The dedicated `scripts/large-archive-smoke.js` check runs inside Linux with sparse temporary storage. It downloads and fully verifies a ZIP64 entry larger than 4 GiB, including all uncompressed bytes and CRC. It is included in container CI. The synthetic data compresses to about 4 MiB; this is not a test of a compressed archive larger than 4 GiB or more than 65,535 entries.
+
+For nginx HTTPS termination, start with [deploy/nginx.conf](deploy/nginx.conf).
+Replace the hostname, certificate paths and private upstream address. Set
+`COOKIE_SECURE=true` in the app and keep its HTTP port private. The example uses
+an entire hostname at `/`; mounting below a URL prefix is not currently supported.
+Keep the public `Host` header including its port, and disable request/response
+buffering for uploads and live events. Adjust proxy timeouts to match your upload
+policy. The app treats the proxy as one client for authentication rate limiting;
+apply per-client limits at the proxy too. Never use the repository's synthetic
+TLS certificates for deployment.
+
+`node scripts/proxy-smoke.js` tests this template with an isolated nginx container,
+temporary app storage and the test certificate trusted only by that test's HTTPS
+agent. It does not install a certificate in the operating system. This passes
+locally on Docker Desktop; Linux GitHub CI is configured but has not run remotely.

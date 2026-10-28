@@ -32,7 +32,7 @@ export async function createApp(options = {}) {
   }
   const publicMode=booleanSetting(options.publicMode ?? process.env.PUBLIC_MODE ?? false,'PUBLIC_MODE');
   const readOnly=booleanSetting(options.readOnly ?? process.env.READ_ONLY ?? false,'READ_ONLY');
-  const secureCookie=booleanSetting(process.env.COOKIE_SECURE ?? false,'COOKIE_SECURE');
+  const secureCookie=booleanSetting(options.secureCookie ?? process.env.COOKIE_SECURE ?? false,'COOKIE_SECURE');
   const certFile=options.tlsCertFile ?? process.env.TLS_CERT_FILE;
   const keyFile=options.tlsKeyFile ?? process.env.TLS_KEY_FILE;
   if(Boolean(certFile)!==Boolean(keyFile))throw new Error('TLS_CERT_FILE and TLS_KEY_FILE must both be configured.');
