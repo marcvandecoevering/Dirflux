@@ -13,6 +13,8 @@ import { createMoveJournal } from './lib/moves.js';
 import { sendOpenedFile } from './lib/download.js';
 import picomatch from 'picomatch';
 import {createServer} from 'node:http';
+import {createServer as createHttpsServer} from 'node:https';
+import {createSecureContext} from 'node:tls';
 import {readLimitedHandle,readLimitedFile} from './lib/read-limited.js';
 
 const scrypt = promisify(crypto.scrypt);
@@ -29,7 +31,16 @@ export async function createApp(options = {}) {
   }
   const publicMode=booleanSetting(options.publicMode ?? process.env.PUBLIC_MODE ?? false,'PUBLIC_MODE');
   const readOnly=booleanSetting(options.readOnly ?? process.env.READ_ONLY ?? false,'READ_ONLY');
-  const secure=booleanSetting(process.env.COOKIE_SECURE ?? false,'COOKIE_SECURE');
+  const secureCookie=booleanSetting(process.env.COOKIE_SECURE ?? false,'COOKIE_SECURE');
+  const certFile=options.tlsCertFile ?? process.env.TLS_CERT_FILE;
+  const keyFile=options.tlsKeyFile ?? process.env.TLS_KEY_FILE;
+  if(Boolean(certFile)!==Boolean(keyFile))throw new Error('TLS_CERT_FILE and TLS_KEY_FILE must both be configured.');
+  let tlsOptions;
+  if(certFile) {
+    tlsOptions={cert:await fsp.readFile(certFile),key:await fsp.readFile(keyFile),minVersion:'TLSv1.2'};
+    createSecureContext(tlsOptions); // Fail on invalid/mismatched credentials before opening storage.
+  }
+  const secure=Boolean(tlsOptions)||secureCookie;
   const guestUser={id:'public',name:'Bezoeker',role:'editor',guest:true};
   function byteLimit(value, name, minimum, maximum = Number.MAX_SAFE_INTEGER) {
     if (!['number','string'].includes(typeof value) || String(value).trim() === '') throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
@@ -63,6 +74,10 @@ export async function createApp(options = {}) {
   const realRoot = await fsp.realpath(root);
   const realConfig = await fsp.realpath(config);
   const comparable = p => process.platform === 'win32' ? p.toLowerCase() : p;
+  if(keyFile) {
+    const realKey=comparable(await fsp.realpath(keyFile));
+    if(realKey===comparable(realRoot)||realKey.startsWith(comparable(realRoot)+path.sep))throw new Error('TLS_KEY_FILE must not be inside FILES_DIR.');
+  }
   if (comparable(realRoot) === comparable(realConfig) || comparable(realConfig).startsWith(comparable(realRoot) + path.sep) || comparable(realRoot).startsWith(comparable(realConfig) + path.sep)) throw new Error('Bestanden en configuratie moeten gescheiden blijven, ook na het volgen van links.');
   const tmp = path.join(config, 'tmp');
   const trashDir = path.join(config, 'trash');
@@ -641,8 +656,8 @@ export async function createApp(options = {}) {
     res.status(status).json({ error: mapped?.[1] || (duplicate ? 'Deze gebruikersnaam bestaat al.' : status === 500 ? 'Er ging iets mis op de server.' : error.message) });
   });
   const stopEvents = () => {watcher?.close();clearTimeout(watchTimer);clearInterval(pollTimer);for(const client of eventClients)client.end();};
-  const listen=(...args)=>createServer({requestTimeout:Math.max(300000,uploadTimeout),headersTimeout:60000},app).listen(...args);
-  return { app, listen, stopEvents, close: () => {if(closed)return;closed=true;stopEvents();db.close();}, root, config, setupTokenRequired: !countUsers() };
+  const listen=(...args)=>(tlsOptions?createHttpsServer:createServer)({...tlsOptions,requestTimeout:Math.max(300000,uploadTimeout),headersTimeout:60000},app).listen(...args);
+  return { app, listen, protocol:tlsOptions?'https':'http', stopEvents, close: () => {if(closed)return;closed=true;stopEvents();db.close();}, root, config, setupTokenRequired: !countUsers() };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -650,6 +665,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (instance.setupTokenRequired) console.log('Initial setup: enter the code from the setup-token file in CONFIG_DIR.');
   const host = process.env.HOST || '127.0.0.1';
   const port = Number(process.env.PORT ?? 8094);
-  const server = instance.listen(port, host, () => console.log(`Droppy Next: http://${host}:${server.address().port}`));
+  const server = instance.listen(port, host, () => console.log(`Droppy Next: ${instance.protocol}://${host}:${server.address().port}`));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {instance.stopEvents();server.close(() => { instance.close(); process.exit(0); });});
 }

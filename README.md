@@ -8,7 +8,7 @@ The implementation uses Node.js 24, Express, SQLite, CodeMirror 6 and PDF.js. Br
 
 [Functional comparison and release gates](docs/PARITY.md) records the reference behavior, available evidence and outstanding work. Existing droppy users, credentials, files, links and configuration do not need migration and are not imported. The new UI may differ visually while preserving the original capabilities.
 
-Current verification on Windows: 41 automated tests pass. Browser checks cover upload replace/keep-both flows and concurrent uploads with independent cancellation. The native release archive passes production-only installation, switching installation directories with persistent data, and restoring a consistent backup into separate storage. Both installations use the current build; cross-version migrations are not verified. GitHub CI is configured for Windows, Linux and macOS, plus a restricted Linux container test; these workflows have **not yet run on GitHub**. The local Docker engine is unavailable, so container support is not yet verified.
+Current verification on Windows: 44 automated tests pass. Browser checks cover upload replace/keep-both flows and concurrent uploads with independent cancellation. The native release archive passes production-only installation, switching installation directories with persistent data, and restoring a consistent backup into separate storage. Both installations use the current build; cross-version migrations are not verified. GitHub CI is configured for Windows, Linux and macOS, plus a restricted Linux container test; these workflows have **not yet run on GitHub**. The local Docker engine is unavailable, so container support is not yet verified.
 
 ## Run from source
 
@@ -98,6 +98,8 @@ Environment variables are read from the process. To use `.env`, copy `.env.examp
 | `IGNORE_PATTERNS` | `[]` | JSON array of root-relative glob patterns, for example `["**/*.tmp","**/.env","private"]` |
 | `POLLING_INTERVAL_MS` | `15000` | Periodically invalidate folder sizes and refresh connected clients; `0` disables this fallback |
 | `COOKIE_SECURE` | `false` | Require HTTPS for session cookies when `true` |
+| `TLS_CERT_FILE` | unset | PEM certificate/full chain for native HTTPS; requires `TLS_KEY_FILE` |
+| `TLS_KEY_FILE` | unset | PEM private key for native HTTPS; must be outside `FILES_DIR` |
 
 For network mounts, periodic refresh works even when native filesystem notifications are unavailable. It refreshes on every interval rather than scanning the entire tree for changes; directory sizes are recalculated on demand. `WATCH=false` disables native notifications independently of periodic refresh. Disabling both means externally changed folder sizes can remain cached until an app mutation or restart.
 
@@ -106,6 +108,10 @@ Public mode mirrors droppy's public file access: visitors receive a session auto
 Ignore patterns use [picomatch](https://github.com/micromatch/picomatch) glob syntax with `/` separators and include dotfiles. Matching is case-insensitive on Windows. Excluding a directory excludes its descendants. Rules apply to listings, search, sizes, previews, downloads, archives, public links and write destinations; restart after changing configuration. Existing links cannot bypass new exclusions. Moving, copying or trashing an entire directory containing excluded entries is rejected, rather than silently moving or deleting hidden content. Choose its visible entries individually. Patterns are exclusion predicates, not an ordered gitignore file with re-inclusion rules.
 
 For an HTTPS reverse proxy, enable `COOKIE_SECURE=true` and preserve the original Host header. Set proxy request-size and timeout limits for expected uploads. The application does not trust forwarded headers for authentication or rate limiting. Proxy subpath hosting is not yet supported/verified.
+
+For native HTTPS without a reverse proxy, configure both TLS file paths and restart. The listener uses HTTPS on `PORT`, supports TLS 1.2 or newer, and always marks session cookies Secure. It does not create a second HTTP listener or redirect HTTP requests. Supply a certificate trusted by your users' browsers for the actual hostname, with its certificate chain and matching unencrypted PEM key. Restrict key-file permissions to the service account; do not store the key in shared files. Restart after certificate renewal. Test certificates under `test/fixtures/` are public fixtures and must never be deployed.
+
+`node lib/health-check.js` checks the configured local HTTP/HTTPS listener. For HTTPS it pins the server certificate to `TLS_CERT_FILE`, so a public hostname certificate can be checked over loopback without accepting a different certificate. The container healthcheck uses this command; actual container execution still needs verification.
 
 Upload deadlines close the connection and discard the incomplete temporary file; retry the upload after a timeout. Receiving uploads does not block other file operations. Publication is serialized and rechecks session validity and destination conflicts before changing a file. The HTTP listener allows the configured upload duration while retaining a separate 60-second header timeout. Proxy timeouts can still end transfers earlier.
 

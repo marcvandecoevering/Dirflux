@@ -20,5 +20,5 @@ RUN mkdir /files /config && chown node:node /files /config
 USER node
 VOLUME ["/files", "/config"]
 EXPOSE 8094
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s CMD node -e "fetch('http://127.0.0.1:8094/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s CMD ["node", "lib/health-check.js"]
 CMD ["node", "server.js"]

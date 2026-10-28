@@ -36,6 +36,8 @@ async function credentials(base) {
 try {
   execFileSync('tar',['-xzf',packed,'-C',temporary],{timeout:30000});
   const app=path.join(temporary,'package');
+  await assert.rejects(fs.stat(path.join(app,'test')),{code:'ENOENT'},'Test fixtures, including public TLS test keys, must not ship');
+  await assert.rejects(fs.stat(path.join(app,'.env')),{code:'ENOENT'},'Local deployment settings must not ship');
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(app,'npm-shrinkwrap.json'),'utf8')),JSON.parse(await fs.readFile(path.join(root,'package-lock.json'),'utf8')));
   runNpm(['ci','--omit=dev','--ignore-scripts'],app);
   execFileSync(process.execPath,['scripts/ensure-assets.js'],{cwd:app,timeout:30000});
