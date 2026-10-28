@@ -32,7 +32,7 @@ export function renderUnraid({name,slug,project,image,icon,branch='main',templat
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
   <ExtraParams>--read-only --cap-drop=ALL --cap-add=CHOWN --cap-add=FOWNER --cap-add=DAC_OVERRIDE --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges --tmpfs=/tmp:rw,noexec,nosuid,size=64m</ExtraParams>
-  <WebUI>http://[IP]:[PORT:8094]/</WebUI>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <Icon>${xml(icon)}</Icon>
   <Project>${xml(source)}</Project>
   <Support>${xml(source+'/issues')}</Support>
@@ -43,7 +43,7 @@ export function renderUnraid({name,slug,project,image,icon,branch='main',templat
   <Beta>true</Beta>
   <Overview>${xml(name)} is a self-hosted file manager with two panes, uploads, previews, editing and share links. Beta release. Set the initial administrator password during installation, then sign in as admin. Protect remote access with HTTPS.</Overview>
   <Requires>Use separate Files and Appdata folders. Empty mount roots are initialized automatically; existing files and permissions are preserved.</Requires>
-${config('Web interface','8094','8094','Port','tcp','HTTP port. Use an HTTPS proxy for remote access.')}
+${config('Web interface','8080','8094','Port','tcp','HTTP port. Use an HTTPS proxy for remote access.')}
 ${config('Files','/files','/mnt/user/'+slug,'Path','rw','Only this folder is exposed through the file manager. Keep it outside Appdata.')}
 ${config('Appdata','/config','/mnt/user/appdata/'+slug,'Path','rw','Private accounts, sessions, settings and trash. Never place inside Files.')}
 ${config('Initial administrator password','INITIAL_ADMIN_PASSWORD','','Variable','','Choose 12–1024 characters. Used only when no account exists; never resets an existing password.','always','true')}

@@ -27,7 +27,7 @@ test('generated beta metadata escapes text and preserves restricted runtime sett
   assert.match(template,/<Name>Example &amp; files<\/Name>/);assert.match(profile,/<Profile>Example &amp; files /);
   assert.match(template,/<Privileged>false<\/Privileged>/);
   assert.ok(template.includes('--cap-drop=ALL --cap-add=CHOWN --cap-add=FOWNER --cap-add=DAC_OVERRIDE --cap-add=SETUID --cap-add=SETGID'));
-  assert.match(template,/<WebUI>http:\/\/\[IP\]:\[PORT:8094\]\/<\/WebUI>/);
+  assert.match(template,/<WebUI>http:\/\/\[IP\]:\[PORT:8080\]\/<\/WebUI>/);
   assert.match(template,/Target="\/files" Default="\/mnt\/user\/example-files"/);
   assert.match(template,/Target="\/config" Default="\/mnt\/user\/appdata\/example-files"/);
   assert.match(template,/<TemplateURL>https:\/\/raw.githubusercontent.com\/example\/example-files\/main\/templates\/example-files.xml<\/TemplateURL>/);

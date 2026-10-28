@@ -82,7 +82,7 @@ after the identity, source, image tag and icon have been verified. Keep the root
 LICENSE and README with them. The generator does not upload or submit files,
 test URL availability, or claim that a registry tag is trustworthy.
 
-The template uses bridge networking and container port 8094. It supplies
+The template uses bridge networking and container port 8080. It supplies
 `--user=99:100`, a read-only container root, dropped capabilities,
 no-new-privileges and a bounded temporary filesystem. These runtime settings
 have passed the local Linux-container smoke checks. It uses `sh`, which exists

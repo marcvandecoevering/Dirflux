@@ -27,7 +27,7 @@ let base, cookie, csrf, running=false, duplicateCreated=false;
 const duplicateName=name+'-duplicate';
 async function waitHealthy() {
   // Docker may assign another ephemeral host port when restarting a container.
-  const port=docker('port',name,'8094/tcp').split(':').at(-1);
+  const port=docker('port',name,'8080/tcp').split(':').at(-1);
   base='http://127.0.0.1:'+port;
   for (let i=0;i<60;i++) {
     try { if ((await fetch(base+'/api/health',{signal:AbortSignal.timeout(1000)})).ok) return; } catch {}
@@ -37,7 +37,7 @@ async function waitHealthy() {
 }
 async function start(readOnly=false) {
   docker('run','--platform',platform,'--detach','--name',name,'--user','99:100','--read-only','--cap-drop=ALL','--security-opt','no-new-privileges',
-    '--tmpfs','/tmp:rw,noexec,nosuid,size=64m','--publish','127.0.0.1::8094',
+    '--tmpfs','/tmp:rw,noexec,nosuid,size=64m','--publish','127.0.0.1::8080',
     '--mount',filesMount+(readOnly?',readonly':''),
     '--mount',configMount,'--env',`READ_ONLY=${readOnly}`,image);
   running=true;

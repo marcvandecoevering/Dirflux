@@ -12,6 +12,8 @@ Your files, in your browser, on your own server. Browse two folders side by side
 
 ### Install on Unraid
 
+**Existing installations:** beta.11 changes the internal port to **8080**. Keep your host port and [update the saved port mapping and WebUI](docs/UNRAID.md#updates) when upgrading.
+
 Find **Dirflux** in **Apps**, select **Install**, choose your files folder and enter an **Initial administrator password** of 12–1024 characters. Click **Apply**, open **WebUI**, and sign in as `admin`.
 
 ### Manual installation (Docker → Add Container)
@@ -24,13 +26,13 @@ Start with an empty template and fill in these fields:
 | Repository | `ghcr.io/marcvandecoevering/dirflux:beta` |
 | Network Type | `Bridge` |
 | Privileged | `Off` |
-| WebUI (Advanced View) | `http://[IP]:[PORT:8094]/` |
+| WebUI (Advanced View) | `http://[IP]:[PORT:8080]/` |
 
 Use **Add another Path, Port, Variable, Label or Device** for each row below. These are **separate fields**, not combined mappings. **Name** is a display label; container paths, ports and variable keys must match exactly.
 
 | Config Type | Name (display label) | Container Port / Container Path / Key | Host Port / Host Path / Value | Other setting |
 | --- | --- | --- | --- | --- |
-| Port | Web interface | `8094` | `8094` | Connection Type: `TCP` |
+| Port | Web interface | `8080` | `8094` | Connection Type: `TCP` |
 | Path | Files | `/files` | `/mnt/user/dirflux` | Access Mode: `Read/Write` |
 | Path | Appdata | `/config` | `/mnt/user/appdata/dirflux` | Access Mode: `Read/Write` |
 | Variable | Initial administrator password | `INITIAL_ADMIN_PASSWORD` | Your chosen password, 12–1024 characters | Required for a new installation |
@@ -39,7 +41,7 @@ Use **Add another Path, Port, Variable, Label or Device** for each row below. Th
 
 For the password entry, enter `INITIAL_ADMIN_PASSWORD` in **Key** and your password in **Value**. Enter values without backticks or quotation marks. Keep the WebUI placeholders literally as shown.
 
-Choose another **host port** if 8094 is occupied; keep **container port** 8094. You can change the Files host folder, but Files and Appdata must stay separate, with neither inside the other. Existing files are preserved and must already be accessible to the configured user.
+Choose another **host port** if 8094 is occupied; keep **container port** 8080. You can change the Files host folder, but Files and Appdata must stay separate, with neither inside the other. Existing files are preserved and must already be accessible to the configured user.
 
 Click **Apply**. Unraid downloads the public image automatically; no GitHub account, clone or manual image download is needed. Open **WebUI** or `http://YOUR-SERVER:8094` (using your chosen host port), then sign in as `admin` with your chosen password. The Repository field takes the image address above, not the GitHub website URL.
 
@@ -54,7 +56,7 @@ npm ci
 npm start
 ```
 
-Open `http://127.0.0.1:8094`. Read `data/config/setup-token` to create your administrator account. There is no default password.
+Open `http://127.0.0.1:8080`. Read `data/config/setup-token` to create your administrator account. There is no default password.
 
 **Docker:** install [`ghcr.io/marcvandecoevering/dirflux:beta`](docs/OPERATIONS.md#install-the-docker-image) (AMD64 / ARM64). Persist `/files` and `/config` separately. Use HTTPS for remote access.
 

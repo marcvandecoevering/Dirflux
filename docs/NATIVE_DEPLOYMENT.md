@@ -61,7 +61,7 @@ The default binds to loopback HTTP. Use the supplied nginx reverse-proxy example
 sudo systemd-analyze verify /etc/systemd/system/file-manager.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now file-manager.service
-curl --fail http://127.0.0.1:8094/api/health
+curl --fail http://127.0.0.1:8080/api/health
 sudo systemctl status file-manager.service
 ```
 

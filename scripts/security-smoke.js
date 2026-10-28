@@ -9,10 +9,10 @@ const volumes=[name+'-files',name+'-config'];let running=false;
 try {
   for(const volume of volumes)docker('volume','create',volume);
   docker('run','-d','--name',name,'--read-only','--cap-drop=ALL',...['CHOWN','FOWNER','DAC_OVERRIDE','SETUID','SETGID'].map(c=>'--cap-add='+c),
-    '--security-opt=no-new-privileges','--tmpfs','/tmp:rw,noexec,nosuid,size=64m','-p','127.0.0.1::8094',
+    '--security-opt=no-new-privileges','--tmpfs','/tmp:rw,noexec,nosuid,size=64m','-p','127.0.0.1::8080',
     ...volumes.flatMap((v,i)=>['--mount',`type=volume,src=${v},dst=${i?'/config':'/files'},volume-nocopy`]),
     '-e','INITIAL_ADMIN_PASSWORD='+password,image);running=true;
-  let base='http://127.0.0.1:'+docker('port',name,'8094/tcp').split(':').at(-1);
+  let base='http://127.0.0.1:'+docker('port',name,'8080/tcp').split(':').at(-1);
   let healthy=false;
   for(let i=0;i<60;i++){try{healthy=(await fetch(base+'/api/health',{signal:AbortSignal.timeout(1000)})).ok;if(healthy)break;}catch{}await new Promise(r=>setTimeout(r,250));}
   assert.ok(healthy,'Container must start');
@@ -30,7 +30,7 @@ try {
     else assert.doesNotMatch(opened.headers.get('content-disposition')||'',/^attachment/);
   }
   docker('restart',name);
-  base='http://127.0.0.1:'+docker('port',name,'8094/tcp').split(':').at(-1);
+  base='http://127.0.0.1:'+docker('port',name,'8080/tcp').split(':').at(-1);
   let restored=false;
   for(let i=0;i<60;i++){try{const r=await fetch(base+'/api/file?path=check.txt&download=1',{headers,signal:AbortSignal.timeout(1000)});if(r.ok&&await r.text()==='security smoke'){restored=true;break;}}catch{}await new Promise(r=>setTimeout(r,250));}
   assert.ok(restored,'Uploaded file and session survive restart');

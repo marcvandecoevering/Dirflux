@@ -5,10 +5,10 @@ services:
     restart: unless-stopped
     init: true
     ports:
-      - "127.0.0.1:8094:8094"
+      - "127.0.0.1:8094:8080"
     environment:
       HOST: 0.0.0.0
-      PORT: 8094
+      PORT: 8080
       FILES_DIR: /files
       CONFIG_DIR: /config
       MAX_UPLOAD_BYTES: 10737418240

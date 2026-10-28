@@ -4,7 +4,7 @@ Reference: droppy 12.2.0, commit `70b61d1ac7c2ce8045e07f4716b6a01abadf6296`, REA
 
 | Original option | Current equivalent or difference | Status |
 | --- | --- | --- |
-| `listeners` | `HOST`, `PORT`, optional `LISTENERS` JSON array for multiple TCP endpoints or Unix sockets on Linux/macOS. Endpoints inherit `TLS_CERT_FILE`/`TLS_KEY_FILE` or explicitly select HTTP/HTTPS and a certificate/key pair. Default loopback:8094 instead of all interfaces:8989. | Multiple endpoints, mixed HTTP/HTTPS and per-listener certificates implemented; see verification limits below. |
+| `listeners` | `HOST`, `PORT`, optional `LISTENERS` JSON array for multiple TCP endpoints or Unix sockets on Linux/macOS. Endpoints inherit `TLS_CERT_FILE`/`TLS_KEY_FILE` or explicitly select HTTP/HTTPS and a certificate/key pair. Default loopback:8080 instead of all interfaces:8989. | Multiple endpoints, mixed HTTP/HTTPS and per-listener certificates implemented; see verification limits below. |
 | `public` | `PUBLIC_MODE`, false by default. Public visitors receive bounded guest sessions with CSRF checks. | Implemented and tested; intentional authentication implementation difference. |
 | `timestamps` | `LOG_TIMESTAMPS`, true by default, adds UTC ISO timestamps to JSON-line application logs. | Implemented and tested. |
 | `linkLength` | Fixed 32 random bytes, encoded as 43 URL-safe characters, instead of five-character defaults. | Intentional security change; short configurable tokens are not offered. |

@@ -23,13 +23,13 @@ New empty storage folders are prepared automatically. No XML download, console c
    | Name | `Dirflux` |
    | Network Type | `Bridge` |
    | Privileged | `Off` |
-   | WebUI (Advanced View) | `http://[IP]:[PORT:8094]/` |
+   | WebUI (Advanced View) | `http://[IP]:[PORT:8080]/` |
 
 4. Use **Add another Path, Port, Variable, Label or Device** to add each row below as a separate entry. **Name** is only the display label. Enter the exact variable name in **Key**, and its setting in **Value**. For paths and ports, fill in the separate container and host fields.
 
    | Config Type | Name (display label) | Container Port / Container Path / Key | Host Port / Host Path / Value | Other setting |
    | --- | --- | --- | --- | --- |
-   | Port | Web interface | `8094` | `8094` | Connection Type: `TCP` |
+   | Port | Web interface | `8080` | `8094` | Connection Type: `TCP` |
    | Path | Files | `/files` | `/mnt/user/dirflux` | Access Mode: `Read/Write` |
    | Path | Appdata | `/config` | `/mnt/user/appdata/dirflux` | Access Mode: `Read/Write` |
    | Variable | Initial administrator password | `INITIAL_ADMIN_PASSWORD` | Your chosen password, 12–1024 characters | Required for a new installation |
@@ -38,7 +38,7 @@ New empty storage folders are prepared automatically. No XML download, console c
 
    For example, **Initial administrator password** is the label, `INITIAL_ADMIN_PASSWORD` is the **Key**, and your password is the **Value**. Container Path must be `/config`, not `config`. Enter values without backticks or quotation marks. Keep the WebUI placeholders literally as shown; Unraid replaces them with your server address and host port.
 
-   Choose another **host port** if 8094 is occupied; leave **container port** at 8094. You may choose a different Files host folder. Keep Files and Appdata separate, with neither inside the other.
+   Choose another **host port** if 8094 is occupied; leave **container port** at 8080. You may choose a different Files host folder. Keep Files and Appdata separate, with neither inside the other.
 
 5. Click **Apply**. Unraid automatically downloads the image from GHCR and starts the container. Wait for startup, then open **WebUI** from the container menu, or visit `http://YOUR-SERVER:8094` using your chosen host port. Sign in as `admin` with the password you entered.
 
@@ -55,6 +55,8 @@ Keep Files and Appdata separate, with neither inside the other. The initializer 
 The initial password creates an account only on a new installation. Changing that variable later does not reset any password. It may be removed after setup; Docker settings remain visible to server administrators. Change account passwords inside Dirflux. Optional `INITIAL_ADMIN_NAME` changes the initial username.
 
 ## Updates
+
+**Upgrading from beta.10 or earlier to beta.11 or newer:** the internal container port changes from `8094` to `8080`. Edit the container's Web interface port entry and set **Container Port** to `8080`; keep your existing **Host Port** (for example `8093` or `8094`). If Unraid does not let you edit the container port, remove that port entry and add it again with the same host port and container port `8080`. Set **WebUI** in Advanced View to `http://[IP]:[PORT:8080]/`. Remove an old explicit `PORT=8094` variable or change it to `8080`; custom `LISTENERS` also override the default. Apply the settings and update the image. Your browser URL and tunnel destination stay the same when the host port is unchanged. Installing a new image alone does not change a saved Unraid port mapping.
 
 Use Unraid's normal **Check for Updates → Update** with the `beta` image tag. Back up both storage folders before updating. The beta channel advances only after release verification; versioned tags remain available for controlled deployments and rollback with matching backups.
 

@@ -9,7 +9,7 @@ import {listenerSettings,startListeners,closeListeners} from '../lib/listeners.j
 import {checkHealth} from '../lib/health-check.js';
 
 test('listener configuration validates endpoints before startup',()=>{
-  assert.deepEqual(listenerSettings({}),[{host:'127.0.0.1',port:8094}]);
+  assert.deepEqual(listenerSettings({}),[{host:'127.0.0.1',port:8080}]);
   assert.deepEqual(listenerSettings({HOST:'::1',PORT:'8095'}),[{host:'::1',port:8095}]);
   assert.deepEqual(listenerSettings({LISTENERS:'[{"host":"::","port":0,"ipv6Only":true}]'}),[{host:'::',port:0,ipv6Only:true}]);
   for(const value of ['bad','null','[]','[null]','[{"host":"","port":123}]','[{"host":"localhost","port":"123"}]','[{"host":"localhost","port":65536}]','[{"host":"localhost","port":12,"protocol":"ftp"}]','[{"path":"relative.sock"}]','[{"path":"/tmp/test.sock","port":123}]'])assert.throws(()=>listenerSettings({LISTENERS:value}));

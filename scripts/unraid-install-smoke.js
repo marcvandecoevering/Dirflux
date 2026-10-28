@@ -12,9 +12,9 @@ const mounts=volumes.flatMap((v,i)=>['--mount',`type=volume,src=${v},dst=${i?'/c
 const restrictions=['--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--tmpfs','/tmp:rw,noexec,nosuid,size=64m'];
 const caps=['CHOWN','FOWNER','DAC_OVERRIDE','SETUID','SETGID'].map(c=>'--cap-add='+c);
 let running=false,base,cookie,csrf;
-async function start(reference,extra=[]){
-  docker('run','-d','--name',name,...restrictions,...extra,...mounts,'-p','127.0.0.1::8094',reference);running=true;
-  base='http://127.0.0.1:'+docker('port',name,'8094/tcp').split(':').at(-1);
+async function start(reference,extra=[],port=8080){
+  docker('run','-d','--name',name,...restrictions,...extra,...mounts,'-p','127.0.0.1::'+port,reference);running=true;
+  base='http://127.0.0.1:'+docker('port',name,port+'/tcp').split(':').at(-1);
   for(let i=0;i<80;i++){try{if((await fetch(base+'/api/health')).ok)return;}catch{}await new Promise(r=>setTimeout(r,250));}
   throw new Error(docker('logs',name));
 }
@@ -39,7 +39,7 @@ try {
   docker('volume','rm',volumes[1]);docker('volume','create',volumes[1]);
   docker('run','--rm',...mounts,'--entrypoint','sh',image,'-c','chown 99:100 /config');
   const previous='ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2';
-  await start(previous,['--user','99:100']);await login('/api/setup');stop();
+  await start(previous,['--user','99:100'],8094);await login('/api/setup');stop();
   const ownership=docker('run','--rm',...mounts,'--entrypoint','stat',image,'-c','%u:%g:%a','/files/persist.txt','/config/state.sqlite');
   await start(image,[...caps,'-e','INITIAL_ADMIN_PASSWORD=must-not-reset-existing']);await login();
   const download=await fetch(base+'/api/file?path=persist.txt&download=1',{headers:{Cookie:cookie}});assert.equal(await download.text(),'upgrade fixture');

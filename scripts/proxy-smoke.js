@@ -27,7 +27,7 @@ try {
   app=await createApp({files:path.join(temp,'files'),config:path.join(temp,'config'),secureCookie:true,publicMode:false,watch:true,pollingInterval:0,updateInterval:150,keepAlive:100,linkExtensions:true});
   server=app.listen(0,'0.0.0.0');await new Promise(resolve=>server.once('listening',resolve));
   const template=await fs.readFile(path.join(root,'deploy/nginx.conf'),'utf8');
-  await fs.writeFile(path.join(temp,'default.conf'),template.replace('http://127.0.0.1:8094',`http://host.docker.internal:${server.address().port}`));
+  await fs.writeFile(path.join(temp,'default.conf'),template.replace('http://127.0.0.1:8080',`http://host.docker.internal:${server.address().port}`));
   const certificates=path.join(root,'test/fixtures/tls');
   agent=new https.Agent({ca:await fs.readFile(path.join(certificates,'cert.pem'))});
   docker('run','--detach','--name',name,'--add-host','host.docker.internal:host-gateway','--publish','127.0.0.1::443',
