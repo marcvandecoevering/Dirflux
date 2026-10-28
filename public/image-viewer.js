@@ -21,6 +21,7 @@ export function bindImageViewer(image, viewport, { initialMode = 'fit', change, 
   function select(nextMode) { mode = mode === nextMode && nextMode !== 'fit' ? 'fit' : nextMode; resize(); }
   const down = event => {
     if(event.pointerType !== 'mouse' || event.button !== 0) return;
+    viewport.focus({preventScroll:true});
     drag = {x:event.clientX,y:event.clientY,left:viewport.scrollLeft,top:viewport.scrollTop};
     viewport.setPointerCapture(event.pointerId);event.preventDefault();
   };

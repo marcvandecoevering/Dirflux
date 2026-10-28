@@ -1,6 +1,7 @@
 import { bindImageViewer } from './image-viewer.js';
 import { fileShortcut } from './file-shortcuts.js';
 import { canEditSession } from './session-permissions.js';
+import { galleryShortcut } from './gallery-shortcuts.js';
 import { dropOperation, readInternalDrop, dropTransfer } from './internal-drop.js';
 import { isAudio, isVideo, nextTrack, audioFailureRecovery, bindVideoPlayback } from './media-playback.js';
 const $ = selector => document.querySelector(selector);
@@ -811,10 +812,15 @@ on(document,'keydown',async e=>{
   if(e.defaultPrevented)return;
   if(e.key==='Escape')$('.menu')?.remove();
   if(e.target.closest('input,textarea,select,[contenteditable]'))return;
-  if(imageViewer&&!imageViewer.canSwipe()&&e.target.closest('.image-viewport')&&['ArrowRight','ArrowLeft','ArrowUp','ArrowDown',' '].includes(e.key))return;
-  // Gallery navigation must not consume native playback/seeking or Space on a focused button.
-  if(currentMedia&&(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('audio,video,[role="slider"]')||([' ','Enter'].includes(e.key)&&e.target.closest('button,a[href],summary,[role="button"]'))))return;
-  if(currentMedia){if(['ArrowRight','ArrowDown',' '].includes(e.key)){e.preventDefault();currentMedia.next();}if(['ArrowLeft','ArrowUp','Backspace'].includes(e.key)){e.preventDefault();currentMedia.previous();}return;}
+  if(currentMedia){
+    const action=galleryShortcut(e,{
+      nativeControl:Boolean(e.target.closest('audio,video,[role="slider"]')),
+      activationControl:Boolean(e.target.closest('button,a[href],summary,[role="button"]')),
+      overflowingImage:Boolean(imageViewer&&!imageViewer.canSwipe()&&e.target.closest('.image-viewport'))
+    });
+    if(action){e.preventDefault();if(action==='next')currentMedia.next();else if(action==='previous')currentMedia.previous();else $('#fullscreen')?.click();}
+    return;
+  }
   if($('#dialog').open||!state.user)return;
   const shortcut=fileShortcut(e,{selected:active().selected.size>0,clipboard:Boolean(clipboard),textSelected:Boolean(window.getSelection()?.toString()),writable:canWrite()});
   if(shortcut==='copy'||shortcut==='move'){e.preventDefault();clipboard={items:active().items.filter(i=>active().selected.has(i.path)),operation:shortcut};renderPanes();}
