@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">Two file panes inside a folder — proposed application mark</title>
+  <rect width="128" height="128" rx="28" fill="#122334"/>
+  <path d="M25 36h27a7 7 0 0 1 5 2l9 9h37a7 7 0 0 1 7 7v42a7 7 0 0 1-7 7H25a7 7 0 0 1-7-7V43a7 7 0 0 1 7-7Z" fill="#59d5d0"/>
+  <rect x="30" y="61" width="25" height="29" rx="3" fill="#122334"/>
+  <rect x="65" y="61" width="33" height="29" rx="3" fill="#122334"/>
+</svg>

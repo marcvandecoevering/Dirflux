@@ -63,3 +63,5 @@ Runner labels are based on the [GitHub-hosted runner reference](https://docs.git
 Original proxy references: [nginx](https://github.com/silverwind/droppy/wiki/Nginx-reverse-proxy) and [Apache](https://github.com/silverwind/droppy/wiki/Apache-reverse-proxy). Both examples proxy the hostname root; this is not evidence of subpath support.
 
 Unraid publication preparation now includes a metadata generator (`scripts/unraid-template.js`) and [deployment/review steps](UNRAID_PUBLICATION.md). Generated beta XML parses locally and rejects unsafe metadata inputs. No final identity has been applied, no registry/repository URLs have been invented for publication, and no submission or Unraid installation has occurred.
+
+Branding: an original two-pane folder SVG and monochrome variant are available in docs/branding, with a responsive name comparison preview. These are proposals only; no name is selected and the runtime still needs its old identity/icons replaced after selection. Browser checks confirm all preview images load at 24/48/80 px and no horizontal overflow at the inspected 736 px viewport.
