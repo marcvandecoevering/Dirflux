@@ -1,4 +1,5 @@
 import { bindImageViewer } from './image-viewer.js';
+import { requestJson, parseApiResponse } from './api-response.js';
 import { fileShortcut } from './file-shortcuts.js';
 import { canEditSession } from './session-permissions.js';
 import { galleryShortcut } from './gallery-shortcuts.js';
@@ -68,12 +69,11 @@ async function api(url, options = {}) {
   const headers = { ...options.headers };
   if (options.body && typeof options.body !== 'string') { headers['Content-Type'] = 'application/json'; options.body = JSON.stringify(options.body); }
   if (options.method && options.method !== 'GET') headers['X-CSRF-Token'] = state.csrf;
-  const response = await fetch('/api' + url, { ...options, headers });
-  const body = await response.json();
+  const { response, body } = await requestJson('/api' + url, { ...options, headers });
   if (!response.ok) {
     if(response.status===403 && body.error?.includes('Invalid session token') && !options.retried){
-      const renewed=await fetch('/api/session').then(r=>r.json());
-      if(renewed.csrf&&renewed.csrf!==state.csrf){state.csrf=renewed.csrf;return api(url,{...options,headers,retried:true});}
+      const {response: renewal, body: renewed}=await requestJson('/api/session');
+      if(renewal.ok&&renewed.csrf&&renewed.csrf!==state.csrf){state.csrf=renewed.csrf;return api(url,{...options,headers,retried:true});}
     }
     if (response.status === 401 && state.user) {
       const owner=state.user.id;
@@ -130,9 +130,8 @@ function pauseEditorSession(owner) {
   on(resume,'click',async()=>{
     resume.disabled=true;
     try {
-      const response=await fetch('/api/session?login=1',{cache:'no-store'});
+      const {response,body:session}=await requestJson('/api/session?login=1');
       if(!response.ok)throw new Error('Could not check the session.');
-      const session=await response.json();
       if(editorInstance!==editor||!status.isConnected)return;
       if(!canEditSession(session,owner))throw new Error('Sign in with the same account with editing permission. Your draft is preserved.');
       Object.assign(state,session);document.body.classList.remove('read-only');
@@ -749,7 +748,13 @@ async function upload(files, destination) {
       await new Promise((resolve, reject) => {
         const xhr = job.xhr = new XMLHttpRequest(); xhr.open('PUT', '/api/upload?' + query); xhr.setRequestHeader('X-CSRF-Token', state.csrf); xhr.setRequestHeader('Content-Type', 'application/octet-stream');
         xhr.upload.onprogress = e => { if (e.lengthComputable) progress.value = e.loaded / e.total * 100; };
-        xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(); else { let message = 'Upload failed.'; try { message = JSON.parse(xhr.responseText).error; } catch {} reject(new Error(message)); } };
+        xhr.onload = () => {
+          try {
+            const body=parseApiResponse(xhr.responseText,xhr.getResponseHeader('Content-Type'),xhr.status);
+            if(xhr.status >= 200 && xhr.status < 300)resolve();
+            else reject(new Error(body.error || 'Upload failed.'));
+          } catch(error) { reject(error); }
+        };
         xhr.onerror = () => reject(new Error('Connection lost.')); xhr.onabort = () => reject(new Error('Cancelled.')); xhr.send(file);
       }); completed++;
     } catch (error) { if(!job.cancelled)errors.push(path + ': ' + error.message); }
