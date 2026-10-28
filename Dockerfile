@@ -9,6 +9,8 @@ RUN npm run build
 
 FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=8094 FILES_DIR=/files CONFIG_DIR=/config
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=$SOURCE_REVISION
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force

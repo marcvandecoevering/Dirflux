@@ -51,6 +51,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
     with:
       ref: ${{ needs.resolve.outputs.revision }}
+      export_images: true
   package:
     needs: [resolve, verify]
     runs-on: ubuntu-24.04
