@@ -22,8 +22,8 @@ export function renderUnraid({name,slug,project,image,icon,branch='main',templat
   if(templateRepoUrl.hostname!=='github.com'||templateRepoUrl.port||!/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/.test(templateRepoUrl.pathname)||templateRepoUrl.search||templateRepoUrl.hash)throw new Error('Template repository must be the canonical GitHub repository URL.');
   const templateRaw=`https://raw.githubusercontent.com${templateRepoUrl.pathname.replace(/\/$/,'')}/${branch}`;
   const source='https://github.com'+repo,raw=`https://raw.githubusercontent.com${repo}/${branch}`;
-  const config=(label,target,defaultValue,type,mode,description,display='always')=>
-    `  <Config Name="${xml(label)}" Target="${xml(target)}" Default="${xml(defaultValue)}" Mode="${xml(mode)}" Description="${xml(description)}" Type="${type}" Display="${display}" Required="true" Mask="false"/>`;
+  const config=(label,target,defaultValue,type,mode,description,display='always',mask='false')=>
+    `  <Config Name="${xml(label)}" Target="${xml(target)}" Default="${xml(defaultValue)}" Mode="${xml(mode)}" Description="${xml(description)}" Type="${type}" Display="${display}" Required="true" Mask="${mask}"/>`;
   const template=`<?xml version="1.0" encoding="UTF-8"?>
 <Container version="2">
   <Name>${xml(name)}</Name>
@@ -31,7 +31,7 @@ export function renderUnraid({name,slug,project,image,icon,branch='main',templat
   <Network>bridge</Network>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <ExtraParams>--user=99:100 --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs=/tmp:rw,noexec,nosuid,size=64m</ExtraParams>
+  <ExtraParams>--read-only --cap-drop=ALL --cap-add=CHOWN --cap-add=FOWNER --cap-add=DAC_OVERRIDE --cap-add=SETUID --cap-add=SETGID --security-opt=no-new-privileges --tmpfs=/tmp:rw,noexec,nosuid,size=64m</ExtraParams>
   <WebUI>http://[IP]:[PORT:8094]/</WebUI>
   <Icon>${xml(icon)}</Icon>
   <Project>${xml(source)}</Project>
@@ -41,11 +41,14 @@ export function renderUnraid({name,slug,project,image,icon,branch='main',templat
   <Category>Tools:System</Category>
   <License>BSD-2-Clause</License>
   <Beta>true</Beta>
-  <Overview>${xml(name)} is a self-hosted file manager with two panes, uploads, previews, editing and share links. Development release. First setup requires the one-time code in /config/setup-token. Protect remote access with HTTPS.</Overview>
-  <Requires>Prepare separate files and config folders writable by UID 99/GID 100. No automatic recursive ownership changes are performed.</Requires>
+  <Overview>${xml(name)} is a self-hosted file manager with two panes, uploads, previews, editing and share links. Beta release. Set the initial administrator password during installation, then sign in as admin. Protect remote access with HTTPS.</Overview>
+  <Requires>Use separate Files and Appdata folders. Empty mount roots are initialized automatically; existing files and permissions are preserved.</Requires>
 ${config('Web interface','8094','8094','Port','tcp','HTTP port. Use an HTTPS proxy for remote access.')}
 ${config('Files','/files','/mnt/user/'+slug,'Path','rw','Only this folder is exposed through the file manager. Keep it outside Appdata.')}
 ${config('Appdata','/config','/mnt/user/appdata/'+slug,'Path','rw','Private accounts, sessions, settings and trash. Never place inside Files.')}
+${config('Initial administrator password','INITIAL_ADMIN_PASSWORD','','Variable','','Choose 12–1024 characters. Used only when no account exists; never resets an existing password.','always','true')}
+${config('User ID','PUID','99','Variable','','Numeric application user ID.','advanced')}
+${config('Group ID','PGID','100','Variable','','Numeric application group ID.','advanced')}
 ${config('Read only','READ_ONLY','false','Variable','','Set true to disable file mutations.','advanced')}
 ${config('Secure cookies','COOKIE_SECURE','false','Variable','','Set true only when accessing through HTTPS.','advanced')}
 </Container>

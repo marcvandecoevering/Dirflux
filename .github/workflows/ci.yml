@@ -102,6 +102,8 @@ jobs:
           --mount "type=bind,src=${{ github.workspace }}/scripts,dst=/app/scripts,readonly"
           --entrypoint node local/file-app-ci --test
       - run: node scripts/container-smoke.js local/file-app-ci
+      - name: Verify fresh Unraid installation and beta.2 upgrade
+        run: node scripts/unraid-install-smoke.js local/file-app-ci
       - name: Scan the built image for known OS and package vulnerabilities
         run: |
           docker image save local/file-app-ci --output "$RUNNER_TEMP/dirflux-image.tar"

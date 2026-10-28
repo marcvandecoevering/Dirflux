@@ -23,7 +23,8 @@ COPY lib ./lib
 COPY --from=assets /build/public ./public
 COPY LICENSE LICENSE.droppy THIRD_PARTY_NOTICES.md ./
 RUN mkdir /files /config && chown node:node /files /config
-USER node
+USER root
+ENTRYPOINT ["node", "/app/lib/container-entrypoint.js"]
 VOLUME ["/files", "/config"]
 EXPOSE 8094
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s CMD ["node", "lib/health-check.js"]

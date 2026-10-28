@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      update_beta:
+        description: Advance the beta update channel after verified image publication
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -104,6 +109,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_REVISION: ${{ needs.resolve.outputs.revision }}
+          PUBLISH_BETA: ${{ inputs.update_beta }}
         run: node scripts/publish-images.js
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

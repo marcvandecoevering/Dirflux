@@ -47,6 +47,12 @@ try {
   const info=JSON.parse(docker('buildx','imagetools','inspect',reference,'--format','{{json .Manifest}}'));
   const index=JSON.parse(docker('buildx','imagetools','inspect',reference,'--raw'));
   if(index.manifests?.length!==2||published.some(item=>!index.manifests.some(entry=>entry.digest===item.digest&&`${entry.platform?.os}/${entry.platform?.architecture}`===item.platform)))throw new Error('Published platform index does not match verified images.');
+  if(process.env.PUBLISH_BETA==='true') {
+    if(!/^\d+\.\d+\.\d+-beta\.\d+$/.test(version))throw new Error('Only beta versions can advance the beta channel.');
+    docker('buildx','imagetools','create','--tag',image+':beta',image+'@'+info.digest);
+    const channel=JSON.parse(docker('buildx','imagetools','inspect',image+':beta','--format','{{json .Manifest}}'));
+    if(channel.digest!==info.digest)throw new Error('Beta channel does not match the verified release.');
+  }
   await fs.writeFile('published-images.json',JSON.stringify({repository,revision,verificationRun:run,tag,reference,digest:info.digest,platforms:published},null,2)+'\n');
   console.log(`Published ${reference}@${info.digest}; both platforms match tested configuration and layers.`);
 } finally { docker('logout','ghcr.io'); }

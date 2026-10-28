@@ -378,7 +378,7 @@ function renderPane(index) {
       case 'preferences':await showPrefs();break;
       case 'logout':$('#logout').click();break;
       case 'search':el.querySelector('.classic-search').classList.toggle('expanded');el.querySelector('.classic-search input').focus();break;
-      case 'about':showDialog('Dirflux', '<p>Zelfstandig herbouwde versie · Dirflux 0.1.0-beta.2</p><p>Oorspronkelijk ontwerp en iconen: <a href="https://github.com/silverwind/droppy" target="_blank" rel="noopener">silverwind/droppy</a>.</p><p>Node.js · SQLite · CodeMirror 6</p>');break;
+      case 'about':showDialog('Dirflux', '<p>Zelfstandig herbouwde versie · Dirflux 0.1.0-beta.3</p><p>Oorspronkelijk ontwerp en iconen: <a href="https://github.com/silverwind/droppy" target="_blank" rel="noopener">silverwind/droppy</a>.</p><p>Node.js · SQLite · CodeMirror 6</p>');break;
     }
   }));
   if(pane.query){el.querySelector('.classic-search').classList.add('expanded');el.querySelector('.classic-search input').value=pane.query;}

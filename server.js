@@ -163,6 +163,15 @@ export async function createApp(options = {}) {
   const publicUser = u => ({ id: u.id, name: u.name, role: u.role, ...(u.guest?{guest:true}:{}) });
   const countUsers = () => db.prepare('SELECT count(*) AS n FROM users').get().n;
   const setupTokenPath = path.join(config,'setup-token');
+  const initialPassword=options.initialAdminPassword ?? process.env.INITIAL_ADMIN_PASSWORD;
+  const initialName=options.initialAdminName ?? process.env.INITIAL_ADMIN_NAME ?? 'admin';
+  if(!countUsers() && initialPassword !== undefined && initialPassword !== '') {
+    if(typeof initialName!=='string'||!/^[\p{L}\p{N}_.@ -]{1,64}$/u.test(initialName.trim()))throw new Error('Invalid INITIAL_ADMIN_NAME.');
+    if(typeof initialPassword!=='string'||initialPassword.length<12||initialPassword.length>1024)throw new Error('INITIAL_ADMIN_PASSWORD must contain 12–1024 characters.');
+    const salt=token(),digest=(await scrypt(initialPassword,salt,64)).toString('hex');
+    db.prepare('INSERT INTO users VALUES (?,?,?,?,?)').run(crypto.randomUUID(),initialName.trim(),salt,digest,'admin');
+    await fsp.rm(setupTokenPath,{force:true});
+  }
   let setupToken;
   if (!countUsers()) {
     try { await fsp.writeFile(setupTokenPath,token()+'\n',{flag:'wx',mode:0o600}); }
@@ -282,7 +291,7 @@ export async function createApp(options = {}) {
     }
     return jsonBody(req,res,next);
   });
-  app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'dirflux', version: '0.1.0-beta.2' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'dirflux', version: '0.1.0-beta.3' }));
   app.get('/api/session', (req, res) => {
     if(publicMode&&!req.auth&&req.query.login!=='1')return res.json({...session(res,guestUser),setup:false,setupTokenRequired:false,publicMode});
     const auth=req.query.login==='1'&&req.auth?.guest?null:req.auth;

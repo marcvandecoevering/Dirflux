@@ -14,6 +14,7 @@ services:
       MAX_UPLOAD_BYTES: 10737418240
       READ_ONLY: "false"
       COOKIE_SECURE: "false"
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
     volumes:
       - droppy-files:/files
       - droppy-config:/config
@@ -21,6 +22,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
 volumes:
   droppy-files:
   droppy-config:
