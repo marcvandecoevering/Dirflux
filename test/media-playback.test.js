@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isAudio, isVideo, nextTrack, bindVideoPlayback } from '../public/media-playback.js';
+import { isAudio, isVideo, nextTrack, audioFailureRecovery, bindVideoPlayback } from '../public/media-playback.js';
+
+test('audio failure recovery attempts each track once and stops when all fail',()=>{
+  const queue=audioFailureRecovery(3);
+  assert.equal(queue.fail(1),2);
+  assert.equal(queue.fail(2),0);
+  assert.equal(queue.fail(0),null);
+  assert.equal(queue.fail(0),null);
+  queue.reset();
+  assert.equal(queue.fail(0),1,'Successful playback allows a later retry of previously failed files');
+  assert.equal(audioFailureRecovery(1).fail(0),null);
+});
 
 test('media playlists exclude directories and other media types', () => {
   const items = [{name:'a.WAV'}, {name:'b.mp4'}, {name:'c.webm'}, {name:'folder.mp4',directory:true}, {name:'photo.png'}];

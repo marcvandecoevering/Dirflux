@@ -11,6 +11,21 @@ export function nextTrack(index, length, delta = 1, shuffle = false, random = Ma
   return (index + delta + length) % length;
 }
 
+export function audioFailureRecovery(length) {
+  const failed=new Set();
+  return {
+    reset() {failed.clear();},
+    fail(index) {
+      failed.add(index);
+      for(let step=1;step<length;step++) {
+        const candidate=(index+step)%length;
+        if(!failed.has(candidate))return candidate;
+      }
+      return null;
+    },
+  };
+}
+
 export function bindVideoPlayback(player, { preferences, next, error, playRejected }) {
   let disposed = false;
   const play = () => { player.play().catch(() => {

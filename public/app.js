@@ -1,5 +1,5 @@
 import { bindImageViewer } from './image-viewer.js';
-import { isAudio, isVideo, nextTrack, bindVideoPlayback } from './media-playback.js';
+import { isAudio, isVideo, nextTrack, audioFailureRecovery, bindVideoPlayback } from './media-playback.js';
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const viewParameters = new URLSearchParams(location.search);
@@ -299,11 +299,20 @@ function playAudio(item,index) {
   if(!bar){bar=document.createElement('div');bar.id='audio-bar';bar.className='audio-bar';bar.innerHTML='<button id="audio-prev" aria-label="Previous track">◀</button><button id="audio-next" aria-label="Next track">▶</button><button id="audio-shuffle" aria-label="Shuffle">⤨</button><span id="audio-title"></span><audio id="audio-player" controls></audio><button id="audio-stop" aria-label="Stop">×</button>';document.body.append(bar);}
   $('#shell').classList.add('has-audio');
   const player=$('#audio-player');
-  function start(){const track=audioItems[audioIndex];$('#audio-title').textContent=track.name;player.src='/api/file?path='+encodeURIComponent(track.path);player.play().catch(()=>toast('Click play to start audio.'));}
+  const recovery=audioFailureRecovery(audioItems.length);let generation=0,stopped=false;
+  function start(){const track=audioItems[audioIndex],request=++generation;$('#audio-title').textContent=track.name;player.src='/api/file?path='+encodeURIComponent(track.path);player.play().catch(error=>{if(!stopped&&request===generation&&error.name==='NotAllowedError')toast('Druk op afspelen om de audio te starten.');});}
   function next(delta){audioIndex=nextTrack(audioIndex,audioItems.length,delta,$('#audio-shuffle').classList.contains('toggle-active'));start();}
   $('#audio-prev').onclick=()=>next(-1);$('#audio-next').onclick=()=>next(1);$('#audio-shuffle').onclick=e=>e.currentTarget.classList.toggle('toggle-active');
   player.onended=()=>next(1);
-  $('#audio-stop').onclick=()=>{player.pause();bar.remove();$('#shell').classList.remove('has-audio');};start();
+  player.onplaying=()=>recovery.reset();
+  player.onerror=()=>{
+    if(stopped||!player.error)return;
+    const following=recovery.fail(audioIndex);
+    if(following===null){player.pause();toast('Geen van de nummers kan worden afgespeeld.',true);return;}
+    toast('Dit nummer kan niet worden afgespeeld. Het volgende wordt geprobeerd.',true);
+    audioIndex=following;start();
+  };
+  $('#audio-stop').onclick=()=>{stopped=true;generation++;player.onended=player.onplaying=player.onerror=null;player.pause();player.removeAttribute('src');player.load();bar.remove();$('#shell').classList.remove('has-audio');};start();
 }
 async function trashItems(items) {
   return formDialog('Naar de prullenbak', '', 'Verplaatsen naar prullenbak', async () => {
