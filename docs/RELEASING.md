@@ -1,5 +1,11 @@
 # Maintainer releases
 
+## Automatic container security patches
+
+`Daily security maintenance` scans first and builds only for available security fixes. It promotes the exact tested AMD64/ARM64 artifacts to `beta`, records dependency changes on `main`, and adds unique `security-<run>-<attempt>` source/image tags. It does not replace native downloads or versioned releases. The short maintenance checks replace the former weekly full test run; full verification remains available for normal development and manually started releases. See [the security policy](../SECURITY.md#update-process).
+
+If a patch attempt fails, inspect its GitHub issue. Identical attempts are suppressed until relevant inputs change. If source was recorded but registry promotion failed, inspect the unique image tag and channel before recovery; never force-push `main`. Manual releases and maintenance share a concurrency group to prevent competing channel updates.
+
 ## Completing user-facing fixes
 
 A pushed source commit alone does not deliver a fix to container users. For changes intended for users, complete the release: increment the version, tag the exact revision, run the release workflow with `create_draft`, `publish_images` and `update_beta`, verify the resulting artifacts, and publish the GitHub prerelease. Keep the native download, versioned AMD64/ARM64 images and `beta` channel on the same verified revision. Never replace an existing version tag or bypass failed checks.

@@ -1,7 +1,7 @@
 FROM node:24-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53 AS assets
 WORKDIR /build
 COPY package*.json ./
-RUN npm ci
+RUN apk upgrade --no-cache && npm ci
 COPY scripts/assets.js ./scripts/assets.js
 COPY src ./src
 COPY public ./public
@@ -16,7 +16,7 @@ LABEL org.opencontainers.image.revision=$SOURCE_REVISION \
       org.opencontainers.image.licenses="BSD-2-Clause"
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force \
+RUN apk upgrade --no-cache && npm ci --omit=dev && npm cache clean --force \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY server.js ./
 COPY lib ./lib

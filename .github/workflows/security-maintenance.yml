@@ -1,0 +1,174 @@
+name: Daily security maintenance
+on:
+  schedule:
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: dirflux-image-publication
+  cancel-in-progress: false
+env:
+  SECURITY_DIR: /tmp/dirflux-security
+jobs:
+  scan:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      build: ${{ steps.prepare.outputs.build }}
+      revision: ${{ steps.prepare.outputs.revision }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - id: prepare
+        name: Scan published platforms and prepare only available security fixes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/security-maintenance.js
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: steps.prepare.outputs.build == 'true'
+        with:
+          name: security-plan
+          path: |
+            ${{ env.SECURITY_DIR }}/plan.json
+            ${{ env.SECURITY_DIR }}/candidate.bundle
+            ${{ env.SECURITY_DIR }}/candidate-audit.json
+          retention-days: 1
+          if-no-files-found: error
+  build:
+    needs: scan
+    if: needs.scan.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            arch: amd64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Load exact prepared source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVISION: ${{ needs.scan.outputs.revision }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --name security-plan --dir "$SECURITY_DIR"
+          git fetch "$SECURITY_DIR/candidate.bundle" HEAD
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$REVISION"
+      - name: Build patch candidate
+        env:
+          REVISION: ${{ needs.scan.outputs.revision }}
+        run: docker build --pull --build-arg SOURCE_REVISION="$REVISION" -t local/file-app-ci .
+      - name: Short functional check
+        run: node scripts/security-smoke.js local/file-app-ci
+      - name: Require actual fixes and no new vulnerability findings
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: node scripts/security-verify.js local/file-app-ci "$ARCH"
+      - name: Export exact tested image
+        run: node scripts/container-candidate.js local/file-app-ci "$RUNNER_TEMP/candidate"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: security-image-${{ matrix.arch }}
+          path: ${{ runner.temp }}/candidate/
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: security-verification-${{ matrix.arch }}
+          path: ${{ env.SECURITY_DIR }}/verification.json
+          retention-days: 1
+          if-no-files-found: error
+  publish:
+    needs: [scan, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Download tested candidates and source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVISION: ${{ needs.scan.outputs.revision }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --name security-plan --dir "$SECURITY_DIR"
+          git fetch "$SECURITY_DIR/candidate.bundle" HEAD
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "$REVISION"
+          for arch in amd64 arm64; do
+            gh run download "$GITHUB_RUN_ID" --name "security-image-$arch" --dir "$SECURITY_DIR/$arch"
+            gh run download "$GITHUB_RUN_ID" --name "security-verification-$arch" --dir "$SECURITY_DIR/evidence-$arch"
+            cp "$SECURITY_DIR/evidence-$arch/verification.json" "$SECURITY_DIR/verification-$arch.json"
+          done
+      - name: Record source and promote verified images to the Unraid channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/security-publish.js
+  finish:
+    needs: [scan, build, publish]
+    if: always() && needs.scan.outputs.build == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Load failure context
+        if: needs.publish.result != 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name security-plan --dir "$SECURITY_DIR"
+      - name: Report unsuccessful patch once
+        if: always() && needs.publish.result != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/security-notify.js
+      - name: Remove temporary image artifacts to limit storage
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {api} from './scripts/security-maintenance.js';
+          const {artifacts}=await api(`actions/runs/${process.env.GITHUB_RUN_ID}/artifacts?per_page=100`);
+          for(const artifact of artifacts)if(artifact.name.startsWith('security-image-'))await api(`actions/artifacts/${artifact.id}`,'DELETE');
+          NODE

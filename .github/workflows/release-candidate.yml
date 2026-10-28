@@ -24,7 +24,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: release-candidate-${{ inputs.tag }}
+  group: dirflux-image-publication
   cancel-in-progress: false
 jobs:
   resolve:

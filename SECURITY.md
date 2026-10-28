@@ -10,6 +10,14 @@ A useful report includes the affected version, minimal reproduction with synthet
 
 ## Update process
 
+The **Daily security maintenance** workflow scans the published `beta` image on AMD64 and ARM64, plus its source lockfile (including bundled browser dependencies), every day at 05:41 UTC. No fixable finding means no build. GitHub may delay scheduled runs.
+
+When fixes are available, it refreshes the pinned Node 24 base, upgrades Alpine packages and applies compatible npm updates. Direct npm dependencies never cross a major version automatically. Both images must pass a short startup/login/upload/download/share/restart check and a fresh scan: targeted findings must disappear and no new findings may be introduced. Existing findings without an available fix remain reported; they do not by themselves trigger a build.
+
+Only verified images are published to unique `security-<run>-<attempt>` tags and the Unraid `beta` channel. Dependency changes are recorded on `main` with a matching source tag. Unreleased application changes, concurrent source/channel changes, missing scan data or failed checks stop promotion. Native archives and existing version tags are not replaced by container security maintenance. A failed candidate creates one issue; the same candidate is not built again until its dependency/base/package-index inputs or maintenance logic change. Human review is needed for major upgrades and application-code vulnerabilities.
+
+Maintenance uses standard public Linux runners, no paid runners or external services. Large temporary image artifacts are deleted after the run (one-day expiry if cleanup fails). Small plan/evidence artifacts expire after one day. Running Unraid containers still need an image update; this workflow does not access your server.
+
 1. Triage reports and dependency advisories against actual use, including development/build dependencies that enter bundled browser assets.
 2. Reproduce the defect and add a regression check when appropriate.
 3. Update the application or dependencies and run the functional, native package and container checks.

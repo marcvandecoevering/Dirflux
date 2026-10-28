@@ -32,7 +32,7 @@ Open `http://127.0.0.1:8094`. Read `data/config/setup-token` to create your admi
 | Network | HTTP or HTTPS (native TLS 1.2+), JSON API, Server-Sent Events and HTTP range downloads |
 | Storage | Local or host-mounted files; no built-in SMB, FTP or WebDAV server |
 | Privacy | No telemetry, CDN or third-party account required |
-| Updates | Versioned releases; dependency and container vulnerability checks; updates via Unraid or manual installation |
+| Updates | Daily security scans; automatic patched images when fixes are available; install updates through Unraid |
 
 All users share one file tree. Public links grant access without login. Media is not transcoded. Keep private configuration outside shared files, back up both directories and use one app process per configuration directory. Do not give untrusted host processes write access to this storage.
 
