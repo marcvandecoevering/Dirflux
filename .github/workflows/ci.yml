@@ -105,10 +105,10 @@ jobs:
       - name: Scan the built image for known OS and package vulnerabilities
         run: |
           docker image save local/file-app-ci --output "$RUNNER_TEMP/dirflux-image.tar"
-          docker run --rm --cap-drop=ALL --security-opt no-new-privileges \
+          docker run --rm --user "$(id -u):$(id -g)" --cap-drop=ALL --security-opt no-new-privileges \
             --mount "type=bind,src=$RUNNER_TEMP,dst=/scan,readonly" \
             aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
-            image --scanners vuln --format json --input /scan/dirflux-image.tar \
+            image --cache-dir /tmp/trivy --scanners vuln --format json --input /scan/dirflux-image.tar \
             > "$RUNNER_TEMP/container-vulnerabilities.json"
           node scripts/check-vulnerabilities.js "$RUNNER_TEMP/container-vulnerabilities.json"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
