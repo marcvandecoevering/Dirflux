@@ -1,4 +1,5 @@
 import { bindImageViewer } from './image-viewer.js';
+import { fileShortcut } from './file-shortcuts.js';
 import { dropOperation, readInternalDrop, dropTransfer } from './internal-drop.js';
 import { isAudio, isVideo, nextTrack, audioFailureRecovery, bindVideoPlayback } from './media-playback.js';
 const $ = selector => document.querySelector(selector);
@@ -756,21 +757,22 @@ on(document,'keydown',async e=>{
   if(currentMedia&&(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('audio,video,[role="slider"]')||([' ','Enter'].includes(e.key)&&e.target.closest('button,a[href],summary,[role="button"]'))))return;
   if(currentMedia){if(['ArrowRight','ArrowDown',' '].includes(e.key)){e.preventDefault();currentMedia.next();}if(['ArrowLeft','ArrowUp','Backspace'].includes(e.key)){e.preventDefault();currentMedia.previous();}return;}
   if($('#dialog').open||!state.user)return;
-  if((e.ctrlKey||e.metaKey)&&['c','x'].includes(e.key)&&active().selected.size){e.preventDefault();clipboard={items:active().items.filter(i=>active().selected.has(i.path)),operation:e.key==='c'?'copy':'move'};renderPanes();}
-  if((e.ctrlKey||e.metaKey)&&e.key==='v'&&clipboard){e.preventDefault();await pasteFiles(active().path);}
+  const shortcut=fileShortcut(e,{selected:active().selected.size>0,clipboard:Boolean(clipboard),textSelected:Boolean(window.getSelection()?.toString()),writable:canWrite()});
+  if(shortcut==='copy'||shortcut==='move'){e.preventDefault();clipboard={items:active().items.filter(i=>active().selected.has(i.path)),operation:shortcut};renderPanes();}
+  if(shortcut==='paste'){e.preventDefault();await pasteFiles(active().path);}
   if(e.key==='Backspace'){e.preventDefault();await navigate(state.active,parent(active().path));}
 });
 window.addEventListener('beforeunload', e => { if (state.dirty || state.uploading) { e.preventDefault(); e.returnValue = ''; } });
 for(const [event,operation] of [['copy','copy'],['cut','move']])on(document,event,e=>{
   if(e.defaultPrevented||!state.user||$('#dialog').open||e.target.closest('input,textarea,select,[contenteditable]')||window.getSelection()?.toString())return;
   const items=active().items.filter(item=>active().selected.has(item.path));
-  if(!items.length)return;
+  if(!items.length||(operation==='move'&&!canWrite()))return;
   e.preventDefault();
   e.clipboardData?.setData('text/plain',items.map(item=>item.path).join('\n'));
   clipboard={items,operation};renderPanes();
 });
 on(document, 'paste', async e => {
-  if (!state.user || !canWrite() || e.target.closest('input,textarea,[contenteditable]') || $('#dialog').open) return;
+  if (e.defaultPrevented || !state.user || !canWrite() || e.target.closest('input,textarea,select,[contenteditable]') || $('#dialog').open) return;
   if(clipboard){e.preventDefault();return pasteFiles(active().path);}
   const files = [...e.clipboardData.files];
   if (files.length) { e.preventDefault(); await upload(files.map(file => ({ file, path:`geplakt-${Date.now()}-${file.name}` })), active().path); }

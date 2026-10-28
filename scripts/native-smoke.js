@@ -75,7 +75,7 @@ try {
   assert.equal((await fetch(base+'/api/health')).status,200);
   const html=await fetch(base+'/').then(response=>response.text());
   assert.match(html,/<script\b[^>]*src="\/app\.js"[^>]*type="module"/);
-  for(const module of ['app.js','media-playback.js','image-viewer.js','upload-entries.js','vendor/extras.js','vendor/pdf.worker.min.mjs','vendor/wasm/openjpeg_nowasm_fallback.js','vendor/wasm/jbig2_nowasm_fallback.js']) {
+  for(const module of ['app.js','file-shortcuts.js','media-playback.js','image-viewer.js','upload-entries.js','vendor/extras.js','vendor/pdf.worker.min.mjs','vendor/wasm/openjpeg_nowasm_fallback.js','vendor/wasm/jbig2_nowasm_fallback.js']) {
     const response=await fetch(base+'/'+module);
     assert.equal(response.status,200,`Missing browser module: ${module}`);
     assert.match(response.headers.get('content-type'),/(?:javascript|ecmascript)/,`Incorrect module MIME: ${module}`);
