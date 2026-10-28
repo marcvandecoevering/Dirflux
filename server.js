@@ -38,6 +38,7 @@ export async function createApp(options = {}) {
   }
   const publicMode=booleanSetting(options.publicMode ?? process.env.PUBLIC_MODE ?? false,'PUBLIC_MODE');
   const readOnly=booleanSetting(options.readOnly ?? process.env.READ_ONLY ?? false,'READ_ONLY');
+  const allowFrame=booleanSetting(options.allowFrame ?? process.env.ALLOW_FRAME ?? false,'ALLOW_FRAME');
   const linkExtensions=booleanSetting(options.linkExtensions ?? process.env.LINK_EXTENSIONS ?? false,'LINK_EXTENSIONS');
   const shareUrl=share=>'/s/'+share.id+(linkExtensions?encodeURIComponent(path.posix.extname(share.path)):'');
   const secureCookie=booleanSetting(options.secureCookie ?? process.env.COOKIE_SECURE ?? false,'COOKIE_SECURE');
@@ -235,8 +236,8 @@ export async function createApp(options = {}) {
   }
   app.use((req, res, next) => {
     res.set({
-      'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'SAMEORIGIN', 'Referrer-Policy': 'no-referrer',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' blob: data:; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'; form-action 'self'"
+      'X-Content-Type-Options': 'nosniff', ...(!allowFrame?{'X-Frame-Options':'SAMEORIGIN'}:{}), 'Referrer-Policy': 'no-referrer',
+      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' blob: data:; img-src 'self' blob: data:; media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; frame-src 'self'; "+(!allowFrame?"frame-ancestors 'self'; ":'')+"object-src 'none'; base-uri 'none'; form-action 'self'"
     });
     if (req.path.startsWith('/api/') || req.path.startsWith('/s/')) res.set('Cache-Control', 'no-store');
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers.origin) {
