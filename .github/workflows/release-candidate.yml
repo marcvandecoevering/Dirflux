@@ -6,6 +6,11 @@ on:
         description: Existing version tag, such as v0.1.0-beta.1
         required: true
         type: string
+      create_draft:
+        description: Create a GitHub draft prerelease after verification (does not publish)
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -72,3 +77,41 @@ jobs:
           path: ${{ runner.temp }}/release-candidate/
           if-no-files-found: error
           retention-days: 30
+  draft:
+    if: ${{ inputs.create_draft }}
+    needs: [resolve, verify, package]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.revision }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Download this run's candidate and verify before creating a draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_REVISION: ${{ needs.resolve.outputs.revision }}
+        run: |
+          set -euo pipefail
+          directory="$(mktemp -d "$RUNNER_TEMP/draft-release.XXXXXXXX")"
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-candidate-$RELEASE_TAG" --dir "$directory"
+          node scripts/verify-candidate.js "$directory"
+          object="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '[.object.type,.object.sha] | @tsv')"
+          read -r kind revision <<< "$object"
+          for depth in {1..16}; do
+            if [ "$kind" = commit ]; then break; fi
+            test "$kind" = tag
+            object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$revision" --jq '[.object.type,.object.sha] | @tsv')"
+            read -r kind revision <<< "$object"
+          done
+          test "$kind" = commit
+          test "$revision" = "$RELEASE_REVISION"
+          gh release create "$RELEASE_TAG" "$directory"/*.tgz "$directory/SHA256SUMS" "$directory/release.json" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --target "$RELEASE_REVISION" \
+            --draft --prerelease --title "$RELEASE_TAG" --generate-notes
