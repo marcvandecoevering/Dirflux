@@ -11,6 +11,7 @@ import { Transform, Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { ZipArchive } from 'archiver';
 import { createMoveJournal } from './lib/moves.js';
+import { createTrashJournal } from './lib/trash.js';
 import { sendOpenedFile } from './lib/download.js';
 import picomatch from 'picomatch';
 import {createServer} from 'node:http';
@@ -95,7 +96,8 @@ export async function createApp(options = {}) {
     CREATE TABLE IF NOT EXISTS shares (id TEXT PRIMARY KEY, path TEXT NOT NULL, expires INTEGER NOT NULL, owner TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS trash (id TEXT PRIMARY KEY, path TEXT NOT NULL, deleted INTEGER NOT NULL, owner TEXT NOT NULL);`);
   const moves=createMoveJournal(db,resolve,options.moveCheckpoint);
-  try { await moves.recover(); } catch(error) {db.close();throw error;}
+  const trashOperations=createTrashJournal(db,resolve,trashDir,options.trashCheckpoint);
+  try { await moves.recover(); await trashOperations.recover(); } catch(error) {db.close();throw error;}
   const app = express();
   let closed=false;
   const eventClients = new Set();
@@ -287,7 +289,7 @@ export async function createApp(options = {}) {
       if(closed)throw fail(503,'De server wordt afgesloten.');
       const current=db.prepare('SELECT path,expires FROM shares WHERE id=?').get(share.id);
       if(!current||(current.expires!==0&&current.expires<=Date.now()))throw fail(404,'Deze downloadlink is verlopen of ingetrokken.');
-      if(current.path!==share.path||moves.blocks(share.path))throw fail(503,'Dit bestand wordt verplaatst. Probeer het later opnieuw.');
+      if(current.path!==share.path||moves.blocks(share.path)||trashOperations.blocks(share.path))throw fail(503,'Dit bestand wordt verplaatst. Probeer het later opnieuw.');
     };
     assertCurrent();
     const { absolute } = await resolve(share.path);
@@ -334,7 +336,7 @@ export async function createApp(options = {}) {
     await previous;
     try {
       if (req.aborted || res.destroyed) return;
-      if (moves.hasPending()) throw fail(503, 'Een onderbroken verplaatsing moet eerst worden hersteld. Herstart de server.');
+      if (moves.hasPending() || trashOperations.hasPending()) throw fail(503, 'Een onderbroken verplaatsing moet eerst worden hersteld. Herstart de server.');
       if (!db.prepare('SELECT id FROM sessions WHERE id=? AND expires>?').get(req.auth.session_id, Date.now())) throw fail(401, 'Je sessie is verlopen.');
       await handler();
     }
@@ -565,22 +567,13 @@ export async function createApp(options = {}) {
     else await moves.move(source,target);
     res.json({ ok: true, path:target.relative });
   });
-  function revokePath(relative) {
-    for (const row of db.prepare('SELECT id,path FROM shares').all()) if (row.path === relative || row.path.startsWith(relative + '/')) db.prepare('DELETE FROM shares WHERE id=?').run(row.id);
-  }
   write.post('/api/trash', writable, async (req, res) => {
     const { relative, absolute } = await resolve(req.body.path);
     if (!relative) throw fail(400, 'De hoofdmap kan niet worden verwijderd.');
     if (ignoreMatchers.length) for await(const _item of walkEntries(relative,true)) { /* Validate every descendant before deleting a parent. */ }
-    const id = crypto.randomUUID(), destination = path.join(trashDir, id);
-    try { await fsp.rename(absolute, destination); }
-    catch (e) {
-      if (e.code !== 'EXDEV') throw e;
-      await fsp.cp(absolute, destination, { recursive: true, force: false, errorOnExist: true });
-      await fsp.rm(absolute, { recursive: true });
-    }
-    db.prepare('INSERT INTO trash VALUES (?,?,?,?)').run(id, relative, Date.now(), req.auth.id);
-    revokePath(relative); res.json({ ok: true, id });
+    const id = crypto.randomUUID();
+    await trashOperations.move('trash', { id, path: relative, deleted: Date.now(), owner: req.auth.id });
+    res.json({ ok: true, id });
   });
   app.get('/api/trash', (req, res) => res.json({ items: req.auth.role === 'admin' ? db.prepare('SELECT * FROM trash ORDER BY deleted DESC').all() : db.prepare('SELECT * FROM trash WHERE owner=? ORDER BY deleted DESC').all(req.auth.id) }));
   write.delete('/api/trash/:id', writable, async (req, res) => {
@@ -598,14 +591,8 @@ export async function createApp(options = {}) {
     if (!row || (row.owner !== req.auth.id && req.auth.role !== 'admin')) throw fail(404, 'Item niet gevonden.');
     const { absolute } = await resolve(row.path, false);
     await absent(absolute); await fsp.mkdir(path.dirname(absolute), { recursive: true });
-    const source = path.join(trashDir, row.id);
-    try { await fsp.rename(source, absolute); }
-    catch (e) {
-      if (e.code !== 'EXDEV') throw e;
-      await fsp.cp(source, absolute, { recursive: true, force: false, errorOnExist: true });
-      await fsp.rm(source, { recursive: true });
-    }
-    db.prepare('DELETE FROM trash WHERE id=?').run(row.id); res.json({ ok: true });
+    await trashOperations.move('restore', row);
+    res.json({ ok: true });
   });
   app.get('/api/shares', (req, res) => res.json({ items: req.auth.role === 'admin' ? db.prepare('SELECT * FROM shares ORDER BY expires DESC').all() : db.prepare('SELECT * FROM shares WHERE owner=? ORDER BY expires DESC').all(req.auth.id) }));
   write.post('/api/shares', writable, async (req, res) => {
