@@ -141,10 +141,25 @@ function showDialog(title, html, className = '') {
 async function formDialog(title, fields, submitLabel, handler, description = '') {
   showDialog(title, `${description ? `<p>${escape(description)}</p>` : ''}<form id="modal-form" class="dialog-form">${fields}<div id="modal-error" class="dialog-error" role="alert"></div><div class="dialog-actions"><button type="button" class="secondary" id="modal-cancel">Annuleren</button><button type="submit" class="primary">${escape(submitLabel)}</button></div></form>`);
   $('#modal-cancel').onclick = closeDialog;
-  $('#modal-form').addEventListener('submit', async e => {
-    e.preventDefault(); const button = e.submitter; button.disabled = true; $('#modal-error').textContent = '';
-    try { await handler(new FormData(e.currentTarget)); closeDialog(); await refreshAll(); }
-    catch (error) { $('#modal-error').textContent = error.message; button.disabled = false; }
+  const form=$('#modal-form'),errorBox=$('#modal-error'),closeButton=$('#dialog-close');
+  const progress=document.createElement('div');progress.setAttribute('role','status');progress.hidden=true;progress.textContent='Bezig… Wacht tot de bewerking is afgerond.';form.append(progress);
+  let submitting=false;
+  closeHook=()=>!submitting;
+  form.addEventListener('submit', async e => {
+    e.preventDefault();if(submitting)return;
+    const data=new FormData(form);
+    const controls=[...form.querySelectorAll('input,select,textarea,button'),closeButton].map(element=>({element,disabled:element.disabled}));
+    submitting=true;form.setAttribute('aria-busy','true');errorBox.textContent='';progress.hidden=false;
+    for(const {element} of controls)element.disabled=true;
+    try {
+      await handler(data);submitting=false;
+      if($('#modal-form')===form)await closeDialog();
+      await refreshAll();
+    } catch(error){if($('#modal-form')===form)errorBox.textContent=error.message;else toast(error.message,true);}
+    finally {
+      submitting=false;form.removeAttribute('aria-busy');progress.hidden=true;
+      for(const {element,disabled} of controls)if(element!==closeButton||!$('#modal-form')||$('#modal-form')===form)element.disabled=disabled;
+    }
   });
   $('#modal-form input')?.focus();
 }
