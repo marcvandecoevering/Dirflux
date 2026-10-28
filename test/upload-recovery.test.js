@@ -45,6 +45,8 @@ for (const phase of ['receiving', 'staged', 'published']) for (const replace of 
         if (names.length && (await fs.stat(path.join(config, 'tmp', names[0]))).size > 0) break;
         assert.ok(Date.now() < deadline, 'Receiving file was not created'); await new Promise(resolve => setTimeout(resolve, 10));
       }
+      await assert.rejects(createApp({ files, config }), { code: 'APP_ALREADY_RUNNING' });
+      assert.equal((await fs.readdir(path.join(config, 'tmp'))).length, 2, 'A second process must not recover an active upload');
       child.kill('SIGKILL');
     } else {
       await assert.rejects(fetch(base + '/api/upload?' + query, { method: 'PUT', headers, body: 'complete new bytes', signal: AbortSignal.timeout(10000) }));

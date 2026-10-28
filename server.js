@@ -13,6 +13,7 @@ import { ZipArchive } from 'archiver';
 import { createMoveJournal } from './lib/moves.js';
 import { createTrashJournal } from './lib/trash.js';
 import { createUploadJournal } from './lib/uploads.js';
+import { acquireInstanceLock } from './lib/instance-lock.js';
 import { sendOpenedFile } from './lib/download.js';
 import picomatch from 'picomatch';
 import {createServer} from 'node:http';
@@ -87,7 +88,10 @@ export async function createApp(options = {}) {
   const trashDir = path.join(config, 'trash');
   await fsp.mkdir(tmp, { recursive: true });
   await fsp.mkdir(trashDir, { recursive: true });
-  const db = new DatabaseSync(path.join(config, 'state.sqlite'));
+  const instanceLock = acquireInstanceLock(realConfig);
+  let database, cleanupStartup = () => {};
+  try {
+  const db = database = new DatabaseSync(path.join(config, 'state.sqlite'));
   db.exec(`PRAGMA journal_mode=WAL;
     PRAGMA synchronous=FULL;
     CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL, role TEXT NOT NULL);
@@ -99,7 +103,7 @@ export async function createApp(options = {}) {
   const moves=createMoveJournal(db,resolve,options.moveCheckpoint);
   const trashOperations=createTrashJournal(db,resolve,trashDir,options.trashCheckpoint);
   const uploads=createUploadJournal(db,resolve,tmp);
-  try { await moves.recover(); await trashOperations.recover(); await uploads.recover(); } catch(error) {db.close();throw error;}
+  await moves.recover(); await trashOperations.recover(); await uploads.recover();
   const app = express();
   let closed=false;
   const eventClients = new Set();
@@ -121,6 +125,7 @@ export async function createApp(options = {}) {
   // Periodic invalidation also covers network mounts that do not deliver fs.watch events.
   const pollTimer = pollingInterval ? setInterval(() => {sizeCache.clear();emitChange();}, pollingInterval) : undefined;
   pollTimer?.unref();
+  cleanupStartup = () => {watcher?.close();clearTimeout(watchTimer);clearInterval(pollTimer);for(const client of eventClients)client.end();};
   app.disable('x-powered-by');
   const attempts = createAttemptLimiter();
   const publicUser = u => ({ id: u.id, name: u.name, role: u.role, ...(u.guest?{guest:true}:{}) });
@@ -652,9 +657,13 @@ export async function createApp(options = {}) {
     if (status >= 500) console.error(error.code || error.name, error.message);
     res.status(status).json({ error: mapped?.[1] || (duplicate ? 'Deze gebruikersnaam bestaat al.' : status === 500 ? 'Er ging iets mis op de server.' : error.message) });
   });
-  const stopEvents = () => {watcher?.close();clearTimeout(watchTimer);clearInterval(pollTimer);for(const client of eventClients)client.end();};
+  const stopEvents = cleanupStartup;
   const listen=(...args)=>(tlsOptions?createHttpsServer:createServer)({...tlsOptions,requestTimeout:Math.max(300000,uploadTimeout),headersTimeout:60000},app).listen(...args);
-  return { app, listen, protocol:tlsOptions?'https':'http', stopEvents, close: () => {if(closed)return;closed=true;stopEvents();db.close();}, root, config, setupTokenRequired: !countUsers() };
+  return { app, listen, protocol:tlsOptions?'https':'http', stopEvents, close: () => {if(closed)return;closed=true;stopEvents();try{db.close();}finally{instanceLock.close();}}, root, config, setupTokenRequired: !countUsers() };
+  } catch (error) {
+    try { cleanupStartup(); database?.close(); } finally { instanceLock.close(); }
+    throw error;
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

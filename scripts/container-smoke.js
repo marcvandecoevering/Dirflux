@@ -1,6 +1,6 @@
 // Run against a disposable local image. Never uses production files or Docker volumes.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -23,7 +23,8 @@ const filesMount=linuxVolumes?`type=volume,src=${name}-files,dst=/files,volume-n
 const configMount=linuxVolumes?`type=volume,src=${name}-config,dst=/config,volume-nocopy`:`type=bind,src=${config},dst=/config`;
 await fs.mkdir(files,{mode:0o777}); await fs.mkdir(config,{mode:0o777});
 await fs.chmod(files,0o777); await fs.chmod(config,0o777);
-let base, cookie, csrf, running=false;
+let base, cookie, csrf, running=false, duplicateCreated=false;
+const duplicateName=name+'-duplicate';
 async function waitHealthy() {
   // Docker may assign another ephemeral host port when restarting a container.
   const port=docker('port',name,'8094/tcp').split(':').at(-1);
@@ -65,6 +66,21 @@ try {
   await login('/api/setup');
   const uploaded=await fetch(base+'/api/upload?path=persist.txt',{method:'PUT',headers:{Cookie:cookie,'X-CSRF-Token':csrf},body:'persistent content'});
   assert.equal(uploaded.status,201,await uploaded.text());
+  docker('run','--platform',platform,'--detach','--name',duplicateName,'--user','99:100','--read-only','--cap-drop=ALL','--security-opt','no-new-privileges',
+    '--tmpfs','/tmp:rw,noexec,nosuid,size=64m','--mount',filesMount,'--mount',configMount,image);
+  duplicateCreated=true;
+  let duplicateState;
+  for(let attempt=0;attempt<40;attempt++) {
+    duplicateState=JSON.parse(docker('inspect',duplicateName,'--format','{{json .State}}'));
+    if(!duplicateState.Running)break;
+    await new Promise(resolve=>setTimeout(resolve,250));
+  }
+  assert.equal(duplicateState.Running,false,'A second container must reject the shared config volume');
+  assert.notEqual(duplicateState.ExitCode,0);
+  const duplicateLogs=spawnSync('docker',['logs',duplicateName],{encoding:'utf8',timeout:10000});
+  assert.equal(duplicateLogs.status,0);assert.match(duplicateLogs.stdout+duplicateLogs.stderr,/APP_ALREADY_RUNNING/);
+  assert.equal((await request('/api/health')).status,200,'Original container must remain healthy');
+  docker('rm',duplicateName);duplicateCreated=false;
   docker('restart',name); await waitHealthy(); await login();
   const restored=await request('/api/text?path=persist.txt');
   assert.equal((await restored.json()).text,'persistent content');
@@ -74,8 +90,9 @@ try {
   await start(true); await login();
   assert.equal((await request('/api/create','POST',{path:'forbidden.txt'})).status,403);
   assert.equal((await request('/api/file?path=persist.txt&download=1')).status,200);
-  console.log(`Container smoke passed (${platform}): UID/GID 99:100, restricted filesystem, upload, restart persistence and read-only mount.`);
+  console.log(`Container smoke passed (${platform}): UID/GID 99:100, restricted filesystem, upload, duplicate-container rejection, restart persistence and read-only mount.`);
 } finally {
+  if(duplicateCreated)docker('rm','--force',duplicateName);
   if(running) docker('rm','--force',name);
   for(const volume of createdVolumes)docker('volume','rm',volume);
   // Only delete the freshly-created test directory, never a supplied path.

@@ -37,6 +37,8 @@ On Windows, use a Windows absolute path for the environment file. For example, `
 
 A process manager must use the selected release's directory as its working directory and preserve the external environment-file path. Configure automatic restart after failures, but stop the service deliberately during updates. A Linux systemd unit is supplied below; Windows/macOS service installers are not yet supplied or verified.
 
+The app holds a configuration-directory lock in `instance-lock.sqlite`. A second app using that directory exits with `APP_ALREADY_RUNNING` before running recovery. Stop the existing service/container before starting its replacement. The lock releases when the owning process exits, including after a crash; do not delete the lock file to force another instance to start. This lock does not coordinate separate configuration directories pointing at the same files.
+
 ## Linux systemd service
 
 The release contains `deploy/file-manager.service` and `deploy/server.env.example`. These use generic deployment names while the app's final identity is being selected. The unit runs under a dedicated `file-manager` account, reads application code from `/opt/file-manager/current`, and permits writes to `/srv/file-manager/files` and `/var/lib/file-manager`. The latter holds configuration, temporary uploads and trash. `current` must point to the chosen release's `package` directory, with production dependencies installed as described above. The service account must be able to traverse/read that directory; application code and its parent directories should be administrator-owned and not writable by the service.
