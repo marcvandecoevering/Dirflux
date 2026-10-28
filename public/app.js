@@ -3,6 +3,7 @@ import { fileShortcut } from './file-shortcuts.js';
 import { canEditSession } from './session-permissions.js';
 import { galleryShortcut } from './gallery-shortcuts.js';
 import { isImage } from './file-types.js';
+import { downloadText } from './text-download.js';
 import { dropOperation, readInternalDrop, dropTransfer } from './internal-drop.js';
 import { isAudio, isVideo, nextTrack, audioFailureRecovery, bindVideoPlayback } from './media-playback.js';
 const $ = selector => document.querySelector(selector);
@@ -611,7 +612,7 @@ async function openFile(item, index, forceText=false) {
   editorInstance=await extras.editor($('#editor-host'),data.text,item.name,prefs,!canWrite(),()=>{state.dirty=true;if(state.user)$('#editor-status').textContent='Unsaved changes';},()=>save().catch(e=>toast(e.message,true)));
   $('#syntax').innerHTML=['Plain text',...extras.modes].map(mode=>`<option>${escape(mode)}</option>`).join('');$('#syntax').value=editorInstance.modeName;
   on($('#syntax'),'change',e=>editorInstance.mode(e.target.value));on($('#save'),'click',save);
-  $('#editor-find').onclick=()=>editorInstance.find();$('#editor-download').onclick=()=>download(item);
+  $('#editor-find').onclick=()=>editorInstance.find();$('#editor-download').onclick=()=>downloadText(editorInstance.getText(),item.name);
     $('#wrap').onclick=()=>{prefs.lineWrapping=!prefs.lineWrapping;editorInstance.wrap(prefs.lineWrapping);localStorage.setItem('droppy-next-prefs',JSON.stringify(prefs));};
   $('#fullscreen').onclick=()=>(viewerMode?window.parent.postMessage({type:'droppy-fullscreen'},location.origin):$('#dialog').classList.toggle('fullscreen-dialog'));
   closeHook=confirmDiscardChanges;
