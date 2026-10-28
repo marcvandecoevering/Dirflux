@@ -123,6 +123,9 @@ export async function createApp(options = {}) {
     CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires);
     CREATE TABLE IF NOT EXISTS shares (id TEXT PRIMARY KEY, path TEXT NOT NULL, expires INTEGER NOT NULL, owner TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS trash (id TEXT PRIMARY KEY, path TEXT NOT NULL, deleted INTEGER NOT NULL, owner TEXT NOT NULL);`);
+  if (!db.prepare('PRAGMA table_info(shares)').all().some(column => column.name === 'download')) {
+    db.exec('ALTER TABLE shares ADD COLUMN download INTEGER NOT NULL DEFAULT 1');
+  }
   const moves=createMoveJournal(db,resolve,options.moveCheckpoint);
   const trashOperations=createTrashJournal(db,resolve,trashDir,options.trashCheckpoint);
   const uploads=createUploadJournal(db,resolve,tmp);
@@ -291,7 +294,7 @@ export async function createApp(options = {}) {
     }
     return jsonBody(req,res,next);
   });
-  app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'dirflux', version: '0.1.0-beta.5' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'dirflux', version: '0.1.0-beta.6' }));
   app.get('/api/session', (req, res) => {
     if(publicMode&&!req.auth&&req.query.login!=='1')return res.json({...session(res,guestUser),setup:false,setupTokenRequired:false,publicMode});
     const auth=req.query.login==='1'&&req.auth?.guest?null:req.auth;
@@ -347,7 +350,7 @@ export async function createApp(options = {}) {
     const handle=await fsp.open(absolute,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));
     try {
       let inline=false;
-      if(req.query.download==='0') {
+      if(req.query.download==='0'||(req.query.download!=='1'&&share.download===0)) {
         const ext=path.extname(absolute).toLowerCase();
         inline=(canInlineFile(absolute)||ext==='.pdf');
         if(!inline&&(await handle.stat()).size<2*1024**2) {
@@ -659,16 +662,18 @@ export async function createApp(options = {}) {
   });
   app.get('/api/shares', (req, res) => {
     const items=req.auth.role === 'admin' ? db.prepare('SELECT * FROM shares ORDER BY expires DESC').all() : db.prepare('SELECT * FROM shares WHERE owner=? ORDER BY expires DESC').all(req.auth.id);
-    res.json({items:items.map(share=>({...share,url:shareUrl(share)}))});
+    res.json({items:items.map(share=>({...share,download:share.download!==0,url:shareUrl(share)}))});
   });
   write.post('/api/shares', writable, async (req, res) => {
     const { relative } = await resolve(req.body.path);
     if (!relative) throw fail(400, 'Deel een bestand of submap.');
+    if (req.body.download !== undefined && typeof req.body.download !== 'boolean') throw fail(400, 'Kies openen of downloaden.');
+    const download = req.body.download !== false || (await fsp.stat((await resolve(relative)).absolute)).isDirectory();
     const hours = Number(req.body.hours ?? 0);
     if (!Number.isFinite(hours) || (hours !== 0 && hours < 1) || hours > 720) throw fail(400, 'Kies 0 (geen vervaldatum) of 1–720 uur.');
     const id = token(), expires = hours === 0 ? 0 : Date.now() + hours * 3600000;
-    db.prepare('INSERT INTO shares VALUES (?,?,?,?)').run(id, relative, expires, req.auth.id);
-    res.status(201).json({ id, url:shareUrl({id,path:relative}), expires });
+    db.prepare('INSERT INTO shares (id,path,expires,owner,download) VALUES (?,?,?,?,?)').run(id, relative, expires, req.auth.id, Number(download));
+    res.status(201).json({ id, url:shareUrl({id,path:relative}), expires, download });
   });
   write.delete('/api/shares/:id', (req, res) => {
     const share = db.prepare('SELECT * FROM shares WHERE id=?').get(req.params.id);

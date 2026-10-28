@@ -378,7 +378,7 @@ function renderPane(index) {
       case 'preferences':await showPrefs();break;
       case 'logout':$('#logout').click();break;
       case 'search':el.querySelector('.classic-search').classList.toggle('expanded');el.querySelector('.classic-search input').focus();break;
-      case 'about':showDialog('Dirflux', '<p>Zelfstandig herbouwde versie · Dirflux 0.1.0-beta.5</p><p>Oorspronkelijk ontwerp en iconen: <a href="https://github.com/silverwind/droppy" target="_blank" rel="noopener">silverwind/droppy</a>.</p><p>Node.js · SQLite · CodeMirror 6</p>');break;
+      case 'about':showDialog('Dirflux', '<p>Zelfstandig herbouwde versie · Dirflux 0.1.0-beta.6</p><p>Oorspronkelijk ontwerp en iconen: <a href="https://github.com/silverwind/droppy" target="_blank" rel="noopener">silverwind/droppy</a>.</p><p>Node.js · SQLite · CodeMirror 6</p>');break;
     }
   }));
   if(pane.query){el.querySelector('.classic-search').classList.add('expanded');el.querySelector('.classic-search input').value=pane.query;}
@@ -635,25 +635,38 @@ async function openFile(item, index, forceText=false) {
   editorInstance.focus();
 }
 async function share(item) {
-  showDialog('Downloadlink maken', `<p>Iedereen met deze link kan <strong>${escape(item.name)}</strong> downloaden, zonder account. De link werkt zolang je server bereikbaar is.</p><form id="share-form" class="dialog-form"><label>Geldigheid<select id="share-hours"><option value="0">Geen vervaldatum</option><option value="24">24 uur</option><option value="168">7 dagen</option><option value="720">30 dagen</option></select></label><button class="primary" type="submit">Link maken</button></form><div id="share-result"></div>`);
+  showDialog('Link delen', `<p>Deel <strong>${escape(item.name)}</strong> zonder account. Iedereen met de link krijgt toegang zolang je server bereikbaar is.</p><form id="share-form" class="dialog-form"><label>Bij openen van de link<select id="share-download" ${item.directory ? 'disabled' : ''}><option value="false">Openen in browser</option><option value="true">Direct downloaden</option></select></label><p class="share-hint">${item.directory ? 'Mappen worden altijd als ZIP gedownload.' : 'De browser opent ondersteunde bestanden. Andere bestandstypen worden gedownload; HTML en SVG worden veilig als tekst getoond.'}</p><label>Geldigheid<select id="share-hours"><option value="0">Geen vervaldatum</option><option value="24">24 uur</option><option value="168">7 dagen</option><option value="720">30 dagen</option></select></label><button class="primary" type="submit">Link maken</button></form><div id="share-result"></div>`);
+  $('#share-download').value = String(item.directory || prefs.sharelinkDownload !== false);
   on($('#share-form'), 'submit', async e => {
     e.preventDefault(); e.submitter.disabled = true;
     try {
-      const result = await api('/shares', { method:'POST', body:{ path:item.path, hours:Number($('#share-hours').value) } });
+      const result = await api('/shares', { method:'POST', body:{ path:item.path, hours:Number($('#share-hours').value), download:$('#share-download').value === 'true' } });
       $('#share-form').hidden = true;
-      $('#share-result').innerHTML = `<label>Downloadlink<input class="share-url" id="share-url" readonly></label><div class="dialog-actions"><button class="primary" id="copy-link">Kopieer link</button></div>`;
-      $('#share-url').value = location.origin + result.url + (prefs.sharelinkDownload ? '' : '?download=0');
+      $('#share-result').innerHTML = `<p>${result.download ? 'Direct downloaden' : 'Openen in browser'}</p><label>Deellink<input class="share-url" id="share-url" readonly></label><div class="dialog-actions"><button class="primary" id="copy-link">Kopieer link</button></div>`;
+      $('#share-url').value = location.origin + result.url;
       on($('#copy-link'), 'click', () => copyLink($('#share-url').value));
     } catch (error) { e.submitter.disabled = false; throw error; }
   });
 }
 async function copyLink(url) {
-  try { await navigator.clipboard.writeText(url); toast('Link gekopieerd.'); }
-  catch { const input = $('#share-url'); if (input) { input.focus(); input.select(); } toast('Selecteer de link en druk op Ctrl+C.'); }
+  const input = $('#share-url');
+  const legacyCopy = () => {
+    if (!input) return false;
+    input.focus(); input.select(); input.setSelectionRange(0, input.value.length);
+    try { return document.execCommand('copy'); } catch { return false; }
+  };
+  // Local HTTP servers do not expose the secure-context Clipboard API.
+  if (!navigator.clipboard?.writeText) {
+    if (legacyCopy()) return toast('Link gekopieerd.');
+  } else {
+    try { await navigator.clipboard.writeText(url); return toast('Link gekopieerd.'); }
+    catch { if (legacyCopy()) return toast('Link gekopieerd.'); }
+  }
+  toast('Kopiëren is geblokkeerd. De link is geselecteerd; gebruik Ctrl+C of ⌘C.');
 }
 async function showShares() {
   const { items } = await api('/shares');
-  showDialog('Gedeelde links', `<p>Links geven downloadtoegang zonder account. Je kunt ze op elk moment intrekken.</p><div class="detail-list">${items.length ? items.map(i => `<div class="detail-item"><div><strong>${escape(i.path)}</strong><small>${!i.expires?'Geen vervaldatum':(i.expires > Date.now() ? 'Geldig tot ' : 'Verlopen op ')+date(i.expires)}</small><input class="share-url" value="${escape(location.origin + i.url)}" readonly aria-label="Downloadlink"></div><button data-revoke="${i.id}" class="danger">Intrekken</button></div>`).join('') : '<p>Je hebt nog geen downloadlinks gemaakt.</p>'}</div>`);
+  showDialog('Gedeelde links', `<p>Links geven toegang zonder account. Je kunt ze op elk moment intrekken.</p><div class="detail-list">${items.length ? items.map(i => `<div class="detail-item"><div><strong>${escape(i.path)}</strong><small>${i.download === false ? 'Openen in browser' : 'Direct downloaden'} · ${!i.expires?'Geen vervaldatum':(i.expires > Date.now() ? 'Geldig tot ' : 'Verlopen op ')+date(i.expires)}</small><input class="share-url" value="${escape(location.origin + i.url)}" readonly aria-label="Deellink"></div><button data-revoke="${i.id}" class="danger">Intrekken</button></div>`).join('') : '<p>Je hebt nog geen deellinks gemaakt.</p>'}</div>`);
   $$('[data-revoke]').forEach(b => on(b, 'click', async () => { await api('/shares/' + b.dataset.revoke, { method:'DELETE' }); await showShares(); toast('Link ingetrokken.'); }));
 }
 async function showTrash() {
