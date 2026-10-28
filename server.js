@@ -48,6 +48,7 @@ export async function createApp(options = {}) {
     if (!Number.isSafeInteger(result) || result < minimum || result > maximum) throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
     return result;
   }
+  const maxPublicSessions = byteLimit(options.maxPublicSessions ?? process.env.MAX_PUBLIC_SESSIONS ?? 1000,'MAX_PUBLIC_SESSIONS',1,1000000);
   const maxUpload = byteLimit(options.maxUpload ?? process.env.MAX_UPLOAD_BYTES ?? 10 * 1024 ** 3,'MAX_UPLOAD_BYTES',0);
   const maxText = byteLimit(options.maxText ?? process.env.MAX_TEXT_BYTES ?? 2 * 1024 ** 2,'MAX_TEXT_BYTES',1,64 * 1024 ** 2);
   const uploadTimeout = byteLimit(options.uploadTimeout ?? process.env.UPLOAD_TIMEOUT_MS ?? 604800000,'UPLOAD_TIMEOUT_MS',1,2147483647);
@@ -88,6 +89,8 @@ export async function createApp(options = {}) {
     PRAGMA synchronous=FULL;
     CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, digest TEXT NOT NULL, role TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, csrf TEXT NOT NULL, expires INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS sessions_user_expiry ON sessions(user_id,expires);
+    CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires);
     CREATE TABLE IF NOT EXISTS shares (id TEXT PRIMARY KEY, path TEXT NOT NULL, expires INTEGER NOT NULL, owner TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS trash (id TEXT PRIMARY KEY, path TEXT NOT NULL, deleted INTEGER NOT NULL, owner TEXT NOT NULL);`);
   const moves=createMoveJournal(db,resolve,options.moveCheckpoint);
@@ -194,7 +197,11 @@ export async function createApp(options = {}) {
   }
   function session(res, user, remember = true) {
     const id = token(), csrf = token();
-    db.prepare('DELETE FROM sessions WHERE expires < ?').run(Date.now());
+    db.prepare('DELETE FROM sessions WHERE expires <= ?').run(Date.now());
+    if(user.guest&&db.prepare("SELECT count(*) AS n FROM sessions WHERE user_id='public'").get().n>=maxPublicSessions) {
+      res.set('Retry-After','60');
+      throw fail(503,'Er zijn momenteel te veel openbare sessies. Probeer het later opnieuw of meld je aan met een account.');
+    }
     db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').run(hash(id), user.id, csrf, Date.now() + 7 * day);
     res.cookie('droppy_session', id, { httpOnly: true, sameSite: 'strict', secure, ...(remember ? {maxAge:7*day} : {}), path: '/' });
     return { user: publicUser(user), csrf, readOnly };

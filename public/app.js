@@ -608,4 +608,7 @@ on(document, 'paste', async e => {
 window.addEventListener('message',e=>{if(e.origin!==location.origin||!['droppy-close','droppy-fullscreen'].includes(e.data?.type))return;const index=state.panes.findIndex((p,i)=>$(`[data-pane="${i}"] iframe`)?.contentWindow===e.source);if(index>=0){if(e.data.type==='droppy-fullscreen'){$(`[data-pane="${index}"]`).classList.toggle('is-fullscreen');return;}$(`[data-pane="${index}"]`).classList.remove('is-fullscreen');$(`[data-pane="${index}"] iframe`).remove();state.panes[index].open=null;renderPane(index);refreshAll(true);recordLocation();}});
 setInterval(() => { if (!viewerMode && state.user && !document.hidden && !$('#dialog').open && !$('.menu') && !state.uploading) refreshAll(true); }, 15000);
 window.addEventListener('popstate',()=>restoreLocation().catch(e=>toast(e.message,true)));
-init().catch(error => { $('#auth').hidden = false; $('#auth-error').textContent = error.message; });
+init().catch(error => {
+  $('#auth').hidden=false;$('#shell').hidden=true;$('#auth-error').textContent=error.message;
+  const link=document.createElement('a');link.href='/?login=1';link.className='secondary';link.textContent='Aanmelden of server instellen';$('#auth-error').after(link);
+});

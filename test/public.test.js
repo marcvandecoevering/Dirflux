@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {createApp} from '../server.js';
+import {DatabaseSync} from 'node:sqlite';
 
 test('public mode grants file editing without account administration; disabling it revokes guest access',async t=>{
   const temp=await fs.mkdtemp(path.join(os.tmpdir(),'public-app-'));
@@ -47,4 +48,31 @@ test('public mode grants file editing without account administration; disabling 
 test('invalid public mode settings fail closed',async()=>{
   for(const publicMode of ['yes','',0,1])await assert.rejects(createApp({publicMode}),/PUBLIC/);
   for(const readOnly of ['tru','',0,1])await assert.rejects(createApp({publicMode:true,readOnly}),/READ_ONLY/);
+  for(const maxPublicSessions of [0,-1,1.5,'',1000001])await assert.rejects(createApp({maxPublicSessions}),/MAX_PUBLIC_SESSIONS/);
+});
+
+test('guest session capacity preserves existing access and admin setup, and reclaims expired slots',async t=>{
+  const temp=await fs.mkdtemp(path.join(os.tmpdir(),'public-capacity-'));
+  const instance=await createApp({files:path.join(temp,'files'),config:path.join(temp,'config'),publicMode:true,maxPublicSessions:2,watch:false,pollingInterval:0});
+  const server=instance.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const db=new DatabaseSync(path.join(instance.config,'state.sqlite'));
+  t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));db.close();instance.close();await fs.rm(temp,{recursive:true,force:true});});
+  const first=await fetch(base+'/api/session'),cookie=first.headers.get('set-cookie').split(';')[0],session=await first.json();
+  assert.equal((await fetch(base+'/api/session')).status,200);
+  for(let n=0;n<5;n++) {
+    const denied=await fetch(base+'/api/session');assert.equal(denied.status,503);assert.equal(denied.headers.get('retry-after'),'60');assert.equal(denied.headers.get('set-cookie'),null);
+  }
+  assert.equal(db.prepare("SELECT count(*) AS n FROM sessions WHERE user_id='public'").get().n,2);
+  const existing=await fetch(base+'/api/session',{headers:{Cookie:cookie}});assert.equal(existing.status,200);assert.equal((await existing.json()).csrf,session.csrf);
+  assert.equal((await fetch(base+'/api/files',{headers:{Cookie:cookie}})).status,200);
+  assert.equal((await fetch(base+'/api/session?login=1')).status,200);
+  const setupToken=(await fs.readFile(path.join(instance.config,'setup-token'),'utf8')).trim();
+  const setup=await fetch(base+'/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'owner',password:'capacity-test-password',setupToken})});
+  assert.equal(setup.status,201);assert.equal((await setup.json()).user.role,'admin');
+  const logout=await fetch(base+'/api/logout',{method:'POST',headers:{Cookie:cookie,'X-CSRF-Token':session.csrf}});assert.equal(logout.status,200);
+  assert.equal((await fetch(base+'/api/session')).status,200);
+  db.prepare("UPDATE sessions SET expires=0 WHERE id=(SELECT id FROM sessions WHERE user_id='public' LIMIT 1)").run();
+  assert.equal((await fetch(base+'/api/session')).status,200);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM sessions WHERE user_id='public'").get().n,2);
 });
