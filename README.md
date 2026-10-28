@@ -1,6 +1,6 @@
-# Droppy Next — working title
+# Dirflux
 
-A self-hosted file manager being rebuilt around droppy's functionality, with a maintained backend and a new identity. **Development preview: not yet a stable release or an approved Unraid Community Applications listing.** The final name and logo are still being selected.
+A self-hosted file manager being rebuilt around droppy's functionality, with a maintained backend and a new identity. **Development preview: not yet a stable release or an approved Unraid Community Applications listing.** The selected name is Dirflux; the app now uses its own logo. Release packaging is still being finalized.
 
 The implementation uses Node.js 24, Express, SQLite, CodeMirror 6 and PDF.js. Browser assets are served locally. There is no external CDN, telemetry or automatic application-code updater.
 
@@ -169,7 +169,7 @@ Dependabot configuration checks npm dependencies, the Docker base image and GitH
 
 ## License and attribution
 
-New code is BSD-2-Clause licensed. The current prototype still uses droppy's original visual assets under their original licenses; its name/logo will be replaced before publication. Third-party licensing is documented in `THIRD_PARTY_NOTICES.md` and `LICENSE.droppy`.
+New code is BSD-2-Clause licensed. The current prototype still uses droppy's original visual assets under their original licenses; Dirflux uses its own name and logo. Third-party licensing is documented in `THIRD_PARTY_NOTICES.md` and `LICENSE.droppy`.
 
 Original reference: https://github.com/silverwind/droppy
 

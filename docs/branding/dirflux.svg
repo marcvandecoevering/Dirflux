@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Dirflux">
 <rect width="96" height="96" rx="22" fill="#122e32"/>
-<path d="M24 29h37l-7-7m7 7-7 7M72 67H35l7 7m-7-7 7-7" fill="none" stroke="#67e5bc" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
-<path d="M24 42v25m48-38v25" fill="none" stroke="#f4faf7" stroke-width="6"/>
+<path d="M21 26 54 26 50 22 54 18 65 29 54 40 50 36 54 32 21 32Z M75 70 42 70 46 74 42 78 31 67 42 56 46 60 42 64 75 64Z" fill="#67e5bc"/>
+<path d="M21 42h6v25h-6zM69 29h6v25h-6z" fill="#f4faf7"/>
 </svg>
