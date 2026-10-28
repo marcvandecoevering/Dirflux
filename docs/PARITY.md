@@ -2,6 +2,8 @@
 
 Status: development, not ready for a public stable release. The selected product name is Dirflux.
 
+Public beta `v0.1.0-beta.2` was released on 2026-10-28 after native and AMD64/ARM64 CI, anonymous image pull, and isolated Unraid 7.3.3 installation checks. See [current publication evidence](UNRAID_PUBLICATION.md); older entries below record earlier revisions and their then-open checks. Full functional parity and stable-release gates remain separate from beta installation readiness.
+
 The target is droppy's user functionality with a maintained backend and a new identity. Existing accounts, links, files and configuration do not need migration. A refreshed interface is permitted. An implementation being present is not proof that its complete user journey works.
 
 Reference: silverwind/droppy commit `70b61d1ac7c2ce8045e07f4716b6a01abadf6296` (12.2.0). Reference files below are relative to that repository. This checkout is research material, not a runtime dependency.
@@ -34,10 +36,10 @@ Reference: silverwind/droppy commit `70b61d1ac7c2ce8045e07f4716b6a01abadf6296` (
 - [ ] Backend adversarial review: path boundaries, races, authorization, resource exhaustion, unauthenticated setup, content serving, crash recovery and database/file consistency.
 - [ ] Browser journeys on desktop and mobile, including keyboard navigation and accessible controls.
 - [ ] Native clean install, restart, upgrade and rollback on supported OS/Node versions.
-- [ ] Container built and tested with non-root Unraid UID/GID, persistent mounts and restricted capabilities.
-- [ ] Final name selected after availability checks, original logo removed, own logo and install icons rendered and verified.
-- [ ] Own OSI license and third-party notices complete.
-- [ ] Public GitHub repository, security reporting, CI, update PRs and release artifacts verified live.
+- [x] Container built and tested with non-root Unraid UID/GID, persistent mounts and restricted capabilities.
+- [x] Final name selected after availability checks, original logo removed, own logo and install icons rendered and verified.
+- [x] Own OSI license and third-party notices complete.
+- [x] Public GitHub repository, security reporting, CI, update PRs and release artifacts verified live.
 - [ ] Public image, tested Unraid XML, support destination and repository profile; validate/scan and submit through current Community Applications portal.
 - [ ] Unraid listing accepted and externally verified; submission alone is not acceptance.
 

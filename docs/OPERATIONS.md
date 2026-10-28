@@ -2,7 +2,7 @@
 
 ## Run from source
 
-Requires Node.js 24 and npm.
+Requires Node.js 24.22.1 or newer and npm.
 
 ```sh
 npm ci
@@ -35,6 +35,25 @@ npm start
 Only production dependencies are needed; the editor and PDF assets have already been built. Keep `FILES_DIR` and `CONFIG_DIR` outside versioned application directories when deploying updates. Download prerelease archives from [GitHub Releases](https://github.com/marcvandecoevering/Dirflux/releases).
 
 Follow the [native installation, update and recovery procedure](NATIVE_DEPLOYMENT.md) for persistent paths, stopped-state backups, installation switching and restoring a previous snapshot.
+
+## Install the Docker image
+
+The public image supports Linux AMD64 and ARM64. On a Linux Docker host, create two new, separate directories owned by UID/GID 1000:1000, then run:
+
+```sh
+docker run -d --name dirflux --restart unless-stopped \
+  --user 1000:1000 --read-only --cap-drop ALL \
+  --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  -p 127.0.0.1:8094:8094 \
+  --mount type=bind,src=/YOUR/FILES,dst=/files \
+  --mount type=bind,src=/YOUR/CONFIG,dst=/config \
+  ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2
+docker exec dirflux cat /config/setup-token
+```
+
+Replace both absolute paths with your prepared directories. Open `http://127.0.0.1:8094` and create your administrator account using the code. Use an HTTPS proxy for remote access. For Unraid, use the [Unraid guide](UNRAID.md), which uses UID/GID 99:100 instead.
+
+Image tags are versioned: updates require choosing a new release tag and recreating the container with the same mounts. Stop the app and back up both directories first. Native and container downloads, checksums and vulnerability reports are available in [Releases](https://github.com/marcvandecoevering/Dirflux/releases).
 
 ## Build Docker locally
 

@@ -21,7 +21,7 @@ npm start
 
 Open `http://127.0.0.1:8094`. Read `data/config/setup-token` to create your administrator account. There is no default password.
 
-**Docker:** [build locally or install a published image](docs/OPERATIONS.md#build-docker-locally). Persist `/files` and `/config` separately. Use HTTPS for remote access.
+**Docker:** install [`ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2`](docs/OPERATIONS.md#install-the-docker-image) (AMD64 / ARM64). Persist `/files` and `/config` separately. Use HTTPS for remote access.
 
 ## Technology and security
 

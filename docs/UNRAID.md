@@ -2,6 +2,13 @@
 
 Dirflux is currently a beta. Community Applications submission is being prepared; it is not yet listed in Apps.
 
+## Install before the Apps listing
+
+1. Download [dirflux.xml](https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/templates/dirflux.xml) to `/boot/config/plugins/dockerMan/templates-user/my-Dirflux.xml` on your Unraid server.
+2. Create separate Files and Appdata directories writable by UID 99/GID 100. Use dedicated folders; never recursively change ownership of an existing share.
+3. Open **Docker → Add Container**, select **Dirflux**, check both paths and choose a free host port (default `8094`). Click **Apply**.
+4. Open the container console and run `cat /config/setup-token`. Open **WebUI** and use that code to create your administrator account.
+
 ## Container settings
 
 Use the published version from [GitHub Releases](https://github.com/marcvandecoevering/Dirflux/releases). The template will select AMD64 or ARM64 automatically.
@@ -23,7 +30,7 @@ Open the container console and run `cat /config/setup-token`. Enter the code in 
 - All accounts share the files you expose through `/files`. Mount only what you intend to manage.
 - For read-only browsing, enable **Read only** and optionally mount `/files` read-only. `/config` must remain writable.
 - Use an HTTPS reverse proxy for remote access and set **Secure cookies** to `true`. Do not enable secure cookies while accessing over HTTP.
-- Before updating, stop Dirflux and back up both mapped directories. Keep the previous image version and matching backup for rollback.
+- Before updating, stop Dirflux and back up both mapped directories. Edit **Repository** to the new release's versioned image tag and apply, preserving both paths. The template pins a version; checking for updates alone does not select a newer version tag. Keep the previous image version and matching backup for rollback.
 - Removing the container must not remove your mapped directories. Keep backups outside those directories.
 
 [Configuration](OPERATIONS.md) · [Support](https://github.com/marcvandecoevering/Dirflux/issues) · [Private security reports](https://github.com/marcvandecoevering/Dirflux/security/advisories/new)

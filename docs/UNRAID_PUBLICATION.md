@@ -1,9 +1,33 @@
 # Unraid publication preparation
 
-Status: not submitted, not listed, and not yet installed on an actual Unraid
-server. The selected name and logo are Dirflux, and the source repository is
-https://github.com/marcvandecoevering/Dirflux. A verified published container image
-and actual Unraid installation checks are still required. Generated files are beta metadata, not approval evidence.
+Status (2026-10-28): beta release and public multiarchitecture image verified;
+installed and tested on Unraid 7.3.3. Not submitted or listed in Apps.
+The remaining portal step is authenticated **Validate and Scan**, followed by
+addressing any findings and submitting for review. Generated files are beta
+metadata, not approval evidence.
+
+## Submission details
+
+| Field | Value |
+| --- | --- |
+| Repository | `https://github.com/marcvandecoevering/Dirflux` |
+| Branch | `main` |
+| Profile | root `ca_profile.xml` |
+| Template | `templates/dirflux.xml` |
+| Image | `ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2` |
+| Platforms | Linux AMD64 and ARM64 |
+| License | BSD-2-Clause; bundled third-party attribution retained |
+| Support | `https://github.com/marcvandecoevering/Dirflux/issues` |
+
+## Verified release and installation
+
+- [Release verification run](https://github.com/marcvandecoevering/Dirflux/actions/runs/40666061376): native Windows/macOS/Linux, both container architectures, 155 automated tests, package verification and large ZIP64 downloads passed.
+- Runtime revision: `e942352458b1fdbfd5bcc7bc08a0fe638a496774` (`v0.1.0-beta.2`). Both container scans reported zero known OS/package vulnerabilities on 2026-10-28; reports accompany the release. This is not a guarantee against application vulnerabilities.
+- Public image index: `sha256:3dec23b0c5d913fbb690767ab0647103d1283ccbda1a58f3a915dfd4509de620`. Anonymous AMD64 pull and the full container smoke test passed. Native ARM64 verification passed in CI; promotion compared both published platform images with the exact tested artifacts.
+- Unraid 7.3.3 / Docker 29.8.2 / x86_64: installed via **Docker → Add Container** using the published template, with only the test name, paths and free host port changed. The canonical template URL was omitted from the disposable copy.
+- Actual Unraid checks passed: first-admin setup, denied anonymous file access, WebUI login, byte-exact upload/download, UID/GID 99:100, setup-token removal, restricted container settings, restart persistence, container removal retaining files, replacement retaining account/data, and downloads with a read-only files mount while writes return 403.
+- Tests used fresh disposable directories and did not modify the existing file-manager installation. HTTPS proxy behavior is covered by CI, not by changing the server's existing proxy. Cross-version data upgrades and other Unraid versions remain unverified.
+- Public icon, template/profile XML and support destinations are present. GitHub private vulnerability reporting and dependency security alerts are enabled.
 
 The [current submission guide](https://ca.unraid.net/submit/help) requires a
 public active repository, an OSI-approved root license, a root `ca_profile.xml`
@@ -44,18 +68,15 @@ first administrator needs the code from the appdata `setup-token` file. The
 template defaults to authenticated access and HTTP on the selected LAN port;
 use HTTPS and enable secure cookies for remote access.
 
-## Remaining acceptance work
+## Remaining portal work
 
-- Confirm the final logo and public metadata URLs, repository license and support
-  destinations. Enable and verify private vulnerability reporting on GitHub.
-- Publish the reviewed versioned image for both architectures; verify pulling by
-  its published digest, not just running a local build.
-- Install the generated template on Unraid with disposable shares. Check folder
-  ownership, initial setup, WebUI launch, upload/download, restart, removal with
-  data retention, read-only mode and HTTPS proxy access.
+- Sign in at the submission portal with the maintainer's Unraid.net account
+  (this is separate from the Unraid server login), and add the repository above.
 - Run [Validate and Scan](https://ca.unraid.net/submit) on the public repository;
   address findings before submission. Repository metadata parsing and a local
   container test do not replace this review or prove acceptance into Apps.
+- Review the final application and submit it when ready. Listing depends on
+  Community Applications approval; do not advertise availability in Apps yet.
 
 The generated tags follow the [public XML field reference](https://ca.unraid.net/submit/help/xml-field-reference).
 No minimum/maximum Unraid version is asserted until that version has been tested.
