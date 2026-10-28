@@ -4,6 +4,7 @@ import { canEditSession } from './session-permissions.js';
 import { galleryShortcut } from './gallery-shortcuts.js';
 import { isImage } from './file-types.js';
 import { downloadText } from './text-download.js';
+import { createEditorSave } from './editor-save.js';
 import { dropOperation, readInternalDrop, dropTransfer } from './internal-drop.js';
 import { isAudio, isVideo, nextTrack, audioFailureRecovery, bindVideoPlayback } from './media-playback.js';
 const $ = selector => document.querySelector(selector);
@@ -601,15 +602,19 @@ async function openFile(item, index, forceText=false) {
     $('#file-download').onclick = () => download(item); return;
   }
   showDialog(item.name, `<div class="editor-toolbar"><button id="save" class="write">Save</button><button id="editor-download">DL</button><button id="wrap">Wrap</button><select id="syntax" aria-label="Syntax"></select><button id="editor-find">Find</button><button id="fullscreen">Full</button><span id="editor-status">UTF-8</span></div><div id="editor-host" class="editor-host" aria-label="Bestandsinhoud"></div>`, 'editor-dialog');
-  let version=data.version;
+  const host=$('#editor-host'),saveButton=$('#save'),status=$('#editor-status');
   const extras=await import('/vendor/extras.js');
-  const save=async()=>{
-    if(!canWrite()||!editorInstance)return;
-    $('#save').disabled=true;
-    try{const text=editorInstance.getText();const result=await api('/text',{method:'POST',body:{path:item.path,text,version}});version=result.version;state.dirty=editorInstance.getText()!==text;$('#editor-status').textContent=state.dirty?'Unsaved changes':'Saved · '+new Date().toLocaleTimeString('nl-NL');await refreshAll();}
-    finally{if($('#save'))$('#save').disabled=!canWrite();}
-  };
-  editorInstance=await extras.editor($('#editor-host'),data.text,item.name,prefs,!canWrite(),()=>{state.dirty=true;if(state.user)$('#editor-status').textContent='Unsaved changes';},()=>save().catch(e=>toast(e.message,true)));
+  if(!host.isConnected)return;
+  let save;
+  const ownedEditor=await extras.editor(host,data.text,item.name,prefs,!canWrite(),()=>{state.dirty=true;if(state.user)status.textContent='Unsaved changes';},()=>save?.().catch(e=>toast(e.message,true)));
+  if(!host.isConnected){ownedEditor.destroy();return;}
+  editorInstance=ownedEditor;
+  save=createEditorSave({version:data.version,getText:()=>ownedEditor.getText(),
+    write:(text,version)=>api('/text',{method:'POST',body:{path:item.path,text,version}}),
+    isActive:()=>editorInstance===ownedEditor&&host.isConnected,canSave:canWrite,
+    onBusy:busy=>{saveButton.disabled=busy||!canWrite();},
+    onSaved:async({dirty})=>{state.dirty=dirty;status.textContent=dirty?'Unsaved changes':'Saved · '+new Date().toLocaleTimeString('nl-NL');await refreshAll();}
+  });
   $('#syntax').innerHTML=['Plain text',...extras.modes].map(mode=>`<option>${escape(mode)}</option>`).join('');$('#syntax').value=editorInstance.modeName;
   on($('#syntax'),'change',e=>editorInstance.mode(e.target.value));on($('#save'),'click',save);
   $('#editor-find').onclick=()=>editorInstance.find();$('#editor-download').onclick=()=>downloadText(editorInstance.getText(),item.name);
