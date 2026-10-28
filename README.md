@@ -10,7 +10,42 @@ Your files, in your browser, on your own server. Browse two folders side by side
 
 ## Get started
 
-**Unraid:** [install through Apps or Add Container](docs/UNRAID.md). Choose your storage folders and initial administrator password, then sign in as `admin`.
+### Install on Unraid
+
+Find **Dirflux** in **Apps**, select **Install**, choose your files folder and enter an **Initial administrator password** of 12–1024 characters. Click **Apply**, open **WebUI**, and sign in as `admin`.
+
+### Manual installation (Docker → Add Container)
+
+Start with an empty template and fill in these fields:
+
+| Field | Enter |
+| --- | --- |
+| Name | `Dirflux` |
+| Repository | `ghcr.io/marcvandecoevering/dirflux:beta` |
+| Network Type | `Bridge` |
+| Privileged | `Off` |
+| WebUI (Advanced View) | `http://[IP]:[PORT:8094]/` |
+
+Use **Add another Path, Port, Variable, Label or Device** for each row below. These are **separate fields**, not combined mappings. **Name** is a display label; container paths, ports and variable keys must match exactly.
+
+| Config Type | Name (display label) | Container Port / Container Path / Key | Host Port / Host Path / Value | Other setting |
+| --- | --- | --- | --- | --- |
+| Port | Web interface | `8094` | `8094` | Connection Type: `TCP` |
+| Path | Files | `/files` | `/mnt/user/dirflux` | Access Mode: `Read/Write` |
+| Path | Appdata | `/config` | `/mnt/user/appdata/dirflux` | Access Mode: `Read/Write` |
+| Variable | Initial administrator password | `INITIAL_ADMIN_PASSWORD` | Your chosen password, 12–1024 characters | Required for a new installation |
+| Variable | User ID | `PUID` | `99` | Default Unraid user ID |
+| Variable | Group ID | `PGID` | `100` | Default Unraid group ID |
+
+For the password entry, enter `INITIAL_ADMIN_PASSWORD` in **Key** and your password in **Value**. Enter values without backticks or quotation marks. Keep the WebUI placeholders literally as shown.
+
+Choose another **host port** if 8094 is occupied; keep **container port** 8094. You can change the Files host folder, but Files and Appdata must stay separate, with neither inside the other. Existing files are preserved and must already be accessible to the configured user.
+
+Click **Apply**. Unraid downloads the public image automatically; no GitHub account, clone or manual image download is needed. Open **WebUI** or `http://YOUR-SERVER:8094` (using your chosen host port), then sign in as `admin` with your chosen password. The Repository field takes the image address above, not the GitHub website URL.
+
+See the [Unraid guide](docs/UNRAID.md) for container restrictions, updates and HTTPS settings.
+
+### Other installation options
 
 **Without Docker:** install Node.js 24.22.1 or newer, clone this repository, then run:
 
