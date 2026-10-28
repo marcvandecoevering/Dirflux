@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { ZipArchive } from 'archiver';
 import { createMoveJournal } from './lib/moves.js';
 import { createTrashJournal } from './lib/trash.js';
+import { createUploadJournal } from './lib/uploads.js';
 import { sendOpenedFile } from './lib/download.js';
 import picomatch from 'picomatch';
 import {createServer} from 'node:http';
@@ -97,7 +98,8 @@ export async function createApp(options = {}) {
     CREATE TABLE IF NOT EXISTS trash (id TEXT PRIMARY KEY, path TEXT NOT NULL, deleted INTEGER NOT NULL, owner TEXT NOT NULL);`);
   const moves=createMoveJournal(db,resolve,options.moveCheckpoint);
   const trashOperations=createTrashJournal(db,resolve,trashDir,options.trashCheckpoint);
-  try { await moves.recover(); await trashOperations.recover(); } catch(error) {db.close();throw error;}
+  const uploads=createUploadJournal(db,resolve,tmp);
+  try { await moves.recover(); await trashOperations.recover(); await uploads.recover(); } catch(error) {db.close();throw error;}
   const app = express();
   let closed=false;
   const eventClients = new Set();
@@ -520,7 +522,7 @@ export async function createApp(options = {}) {
       if (!previous.isFile()) throw fail(409, 'Een map kan niet door een bestand worden vervangen.');
       if (fileVersion(previous) !== req.query.version) throw fail(409, 'Het bestand is ondertussen gewijzigd. Bevestig opnieuw voordat je overschrijft.');
     } else if (conflict === 'reject') await absent(absolute);
-    const temporary = path.join(tmp, crypto.randomUUID());
+    const {id:uploadId,temporary} = uploads.begin();
     let staged;
     let bytes = 0;
     const limit = new Transform({ transform(chunk, _encoding, cb) { bytes += chunk.length; cb(maxUpload && bytes > maxUpload ? fail(413, 'Bestand is groter dan de uploadlimiet.') : null, chunk); } });
@@ -532,8 +534,9 @@ export async function createApp(options = {}) {
         ({absolute,relative}=await availablePath(relative));
       }
       await fsp.mkdir(path.dirname(absolute), { recursive: true });
-      staged = path.join(path.dirname(absolute), '.app-tmp-' + crypto.randomUUID());
+      staged = await uploads.stage(uploadId, path.posix.dirname(relative) === '.' ? '' : path.posix.dirname(relative));
       await fsp.copyFile(temporary, staged, fs.constants.COPYFILE_EXCL);
+      await options.uploadCheckpoint?.('staged');
       if (previous) {
         await resolve(relative);
         if (fileVersion(await fsp.stat(absolute)) !== req.query.version) throw fail(409, 'Het bestand is tijdens de upload gewijzigd. Het is niet overschreven.');
@@ -543,14 +546,14 @@ export async function createApp(options = {}) {
         // Publish only the completed file, without replacing an existing destination.
         await fsp.link(staged, absolute);
       }
+      await options.uploadCheckpoint?.('published');
       await fsp.rm(staged, { force: true });
       staged = undefined;
       sizeCache.clear();
       res.status(201).json({ ok: true, bytes, path:relative });
       });
     } finally {
-      if (staged) await fsp.rm(staged, { force: true });
-      await fsp.rm(temporary, { force: true });
+      await uploads.cleanup(uploadId);
     }
   });
   write.post('/api/transfer', writable, async (req, res) => {
