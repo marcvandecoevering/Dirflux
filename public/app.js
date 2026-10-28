@@ -526,7 +526,7 @@ async function copyLink(url) {
 }
 async function showShares() {
   const { items } = await api('/shares');
-  showDialog('Gedeelde links', `<p>Links geven downloadtoegang zonder account. Je kunt ze op elk moment intrekken.</p><div class="detail-list">${items.length ? items.map(i => `<div class="detail-item"><div><strong>${escape(i.path)}</strong><small>${!i.expires?'Geen vervaldatum':(i.expires > Date.now() ? 'Geldig tot ' : 'Verlopen op ')+date(i.expires)}</small><input class="share-url" value="${escape(location.origin + '/s/' + i.id)}" readonly aria-label="Downloadlink"></div><button data-revoke="${i.id}" class="danger">Intrekken</button></div>`).join('') : '<p>Je hebt nog geen downloadlinks gemaakt.</p>'}</div>`);
+  showDialog('Gedeelde links', `<p>Links geven downloadtoegang zonder account. Je kunt ze op elk moment intrekken.</p><div class="detail-list">${items.length ? items.map(i => `<div class="detail-item"><div><strong>${escape(i.path)}</strong><small>${!i.expires?'Geen vervaldatum':(i.expires > Date.now() ? 'Geldig tot ' : 'Verlopen op ')+date(i.expires)}</small><input class="share-url" value="${escape(location.origin + i.url)}" readonly aria-label="Downloadlink"></div><button data-revoke="${i.id}" class="danger">Intrekken</button></div>`).join('') : '<p>Je hebt nog geen downloadlinks gemaakt.</p>'}</div>`);
   $$('[data-revoke]').forEach(b => on(b, 'click', async () => { await api('/shares/' + b.dataset.revoke, { method:'DELETE' }); await showShares(); toast('Link ingetrokken.'); }));
 }
 async function showTrash() {

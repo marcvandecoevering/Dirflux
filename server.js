@@ -35,6 +35,8 @@ export async function createApp(options = {}) {
   }
   const publicMode=booleanSetting(options.publicMode ?? process.env.PUBLIC_MODE ?? false,'PUBLIC_MODE');
   const readOnly=booleanSetting(options.readOnly ?? process.env.READ_ONLY ?? false,'READ_ONLY');
+  const linkExtensions=booleanSetting(options.linkExtensions ?? process.env.LINK_EXTENSIONS ?? false,'LINK_EXTENSIONS');
+  const shareUrl=share=>'/s/'+share.id+(linkExtensions?encodeURIComponent(path.posix.extname(share.path)):'');
   const secureCookie=booleanSetting(options.secureCookie ?? process.env.COOKIE_SECURE ?? false,'COOKIE_SECURE');
   const certFile=options.tlsCertFile ?? process.env.TLS_CERT_FILE;
   const keyFile=options.tlsKeyFile ?? process.env.TLS_KEY_FILE;
@@ -290,7 +292,8 @@ export async function createApp(options = {}) {
     res.json(session(res, currentUser, req.body.remember !== false));
   });
   app.get('/s/:id', async (req, res) => {
-    const share = db.prepare('SELECT * FROM shares WHERE id=? AND (expires=0 OR expires>?)').get(req.params.id, Date.now());
+    // The optional extension is descriptive; authorization and MIME type use the stored target.
+    const share = db.prepare('SELECT * FROM shares WHERE id=? AND (expires=0 OR expires>?)').get(req.params.id.split('.')[0], Date.now());
     if (!share) throw fail(404, 'Deze downloadlink is verlopen of ingetrokken.');
     const assertCurrent = () => {
       if(closed)throw fail(503,'De server wordt afgesloten.');
@@ -602,7 +605,10 @@ export async function createApp(options = {}) {
     await trashOperations.move('restore', row);
     res.json({ ok: true });
   });
-  app.get('/api/shares', (req, res) => res.json({ items: req.auth.role === 'admin' ? db.prepare('SELECT * FROM shares ORDER BY expires DESC').all() : db.prepare('SELECT * FROM shares WHERE owner=? ORDER BY expires DESC').all(req.auth.id) }));
+  app.get('/api/shares', (req, res) => {
+    const items=req.auth.role === 'admin' ? db.prepare('SELECT * FROM shares ORDER BY expires DESC').all() : db.prepare('SELECT * FROM shares WHERE owner=? ORDER BY expires DESC').all(req.auth.id);
+    res.json({items:items.map(share=>({...share,url:shareUrl(share)}))});
+  });
   write.post('/api/shares', writable, async (req, res) => {
     const { relative } = await resolve(req.body.path);
     if (!relative) throw fail(400, 'Deel een bestand of submap.');
@@ -610,7 +616,7 @@ export async function createApp(options = {}) {
     if (!Number.isFinite(hours) || (hours !== 0 && hours < 1) || hours > 720) throw fail(400, 'Kies 0 (geen vervaldatum) of 1–720 uur.');
     const id = token(), expires = hours === 0 ? 0 : Date.now() + hours * 3600000;
     db.prepare('INSERT INTO shares VALUES (?,?,?,?)').run(id, relative, expires, req.auth.id);
-    res.status(201).json({ id, url: '/s/' + id, expires });
+    res.status(201).json({ id, url:shareUrl({id,path:relative}), expires });
   });
   write.delete('/api/shares/:id', (req, res) => {
     const share = db.prepare('SELECT * FROM shares WHERE id=?').get(req.params.id);
