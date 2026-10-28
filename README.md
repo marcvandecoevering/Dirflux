@@ -2,7 +2,7 @@
 
 <img src="public/brand/dirflux-192.png" alt="Dirflux" width="96" height="96">
 
-[![Verify](https://github.com/marcvandecoevering/Dirflux/actions/workflows/ci.yml/badge.svg)](https://github.com/marcvandecoevering/Dirflux/actions/workflows/ci.yml)
+[![Release verification](https://github.com/marcvandecoevering/Dirflux/actions/workflows/release-candidate.yml/badge.svg?branch=main&event=workflow_dispatch)](https://github.com/marcvandecoevering/Dirflux/actions/workflows/release-candidate.yml)
 
 Your files, in your browser, on your own server. Browse two folders side by side, upload, edit text, preview images/PDFs/media, share links and recover deleted files.
 
