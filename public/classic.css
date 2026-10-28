@@ -11,3 +11,10 @@ body{background:#181818;position:fixed;inset:0;overflow:hidden}.shell{height:100
 @media(max-width:639px){.classic th:nth-child(3),.classic td:nth-child(3){display:none}.classic th:nth-child(4),.classic td:nth-child(4){display:table-cell}.classic th:nth-child(4){width:70px}.classic .split th:nth-child(4),.classic .split td:nth-child(4){display:none}}
 .upload-panel{max-height:50vh;overflow:auto}.upload-job+.upload-job{border-top:1px solid #aaa;margin-top:12px;padding-top:12px}.upload-job>div{display:flex;justify-content:space-between;align-items:center;gap:12px}.upload-job progress{display:block;width:100%;margin:8px 0}.upload-job small{display:block;white-space:pre-wrap;overflow-wrap:anywhere}.upload-job .upload-destination{margin-top:4px}
 .search-more{display:block;margin:16px auto;padding:10px 20px}
+
+/* Keep image navigation visible while the image scrolls independently. */
+.image-viewport{flex:1;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;touch-action:pan-x pan-y pinch-zoom;cursor:grab}
+.image-viewport:active{cursor:grabbing}
+.image-viewport .preview-image,.viewer-mode .image-viewport .preview-image{display:block;flex:none;max-width:none;max-height:none;object-fit:fill;margin:auto;user-select:none}
+.preview-controls [aria-pressed=true]{background:#4a4a4a;color:white}
+#image-scale{align-self:center;min-width:4em;text-align:center;font-size:13px}

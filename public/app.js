@@ -1,3 +1,4 @@
+import { bindImageViewer } from './image-viewer.js';
 import { isAudio, isVideo, nextTrack, bindVideoPlayback } from './media-playback.js';
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -18,7 +19,7 @@ const kind = item => item.directory ? 'folder' : /\.(png|jpe?g|gif|webp|avif|bmp
 let toastTimer, closeHook = null, refreshBusy = false;
 const uploadJobs = new Set();
 let uploadConflictQueue = Promise.resolve();
-let videoPlayback = null;
+let videoPlayback = null, imageViewer = null, imageFitMode = 'fit';
 let editorInstance = null, currentMedia = null, clipboard = null, audioItems = [], audioIndex = 0, eventSource = null;
 const defaultPrefs = { theme:'droppy',editorFontSize:16,indentWithTabs:false,indentUnit:4,lineWrapping:false,loop:true,autonext:false,sharelinkDownload:true };
 let prefs;
@@ -71,14 +72,14 @@ function on(element, event, action) {
 }
 function closeDialog() {
   if (closeHook && !closeHook()) return;
-  videoPlayback?.destroy(); videoPlayback=null;
+  videoPlayback?.destroy(); videoPlayback=null; imageViewer?.destroy(); imageViewer=null;
   editorInstance?.destroy(); editorInstance=null; currentMedia=null;
   $('#dialog').close(); $('#dialog-content').replaceChildren(); state.dirty = false; closeHook = null;
   if(viewerMode)window.parent.postMessage({type:'droppy-close'},location.origin);
 }
 window.confirmCloseView = () => !state.dirty || confirm('Wijzigingen zijn nog niet opgeslagen. Toch sluiten?');
 function showDialog(title, html, className = '') {
-  videoPlayback?.destroy(); videoPlayback=null;
+  videoPlayback?.destroy(); videoPlayback=null; imageViewer?.destroy(); imageViewer=null;
   editorInstance?.destroy(); editorInstance=null; currentMedia=null;
   $('#dialog-title').textContent = title; $('#dialog-content').innerHTML = html; $('#dialog').className = className;
   state.dirty = false; closeHook = null;
@@ -332,13 +333,26 @@ async function openFile(item, index, forceText=false) {
   if (!forceText && /\.pdf$/i.test(item.name)) return openPdf(item);
   if (!forceText && ['image','media'].includes(kind(item))) {
     const type = kind(item) === 'image' ? 'image' : /\.(mp3|wav|ogg|m4a|flac)$/i.test(item.name) ? 'audio' : 'video';
-    showDialog(item.name, `${type === 'image' ? `<img class="preview-image" src="${url}" alt="${escape(item.name)}">` : `<${type} class="preview-${type}" src="${url}" controls></${type}>`}<div class="preview-controls"><button class="secondary" id="preview-prev">← Vorige</button><button class="secondary" id="preview-download">Download</button><button class="secondary" id="preview-zoom">Zoom</button><button class="secondary" id="fullscreen">Vergroten</button><button class="secondary" id="preview-next">Volgende →</button></div>`, 'preview-dialog');
+    showDialog(item.name, `${type === 'image' ? `<div class="image-viewport" tabindex="0" aria-label="Afbeelding verschuiven"><img class="preview-image" src="${url}" alt="${escape(item.name)}" draggable="false"></div>` : `<${type} class="preview-${type}" src="${url}" controls></${type}>`}<div class="preview-controls"><button class="secondary" id="preview-prev">← Vorige</button><button class="secondary" id="preview-download">Download</button><button class="secondary" id="preview-zoom">Zoom</button><button class="secondary" id="fullscreen">Vergroten</button><button class="secondary" id="preview-next">Volgende →</button></div>`, 'preview-dialog');
     const peers = state.panes[index].items.filter(i => type === 'video' ? isVideo(i) : kind(i) === 'image'); const at = peers.findIndex(i => i.path === item.path);
     $('#preview-prev').disabled = at <= 0; $('#preview-next').disabled = at >= peers.length - 1;
     on($('#preview-prev'), 'click', () => openFile(peers[at-1], index)); on($('#preview-next'), 'click', () => openFile(peers[at+1], index)); $('#preview-download').onclick = () => download(item);
     $('#fullscreen').onclick = () => (viewerMode?window.parent.postMessage({type:'droppy-fullscreen'},location.origin):$('#dialog').classList.toggle('fullscreen-dialog'));
     currentMedia={previous:()=>{if(at>0)openFile(peers[at-1],index);},next:()=>{if(at<peers.length-1)openFile(peers[at+1],index);}};
-    $('#preview-zoom').onclick=()=>{const media=$('.preview-image')||$('.preview-video');media.classList.toggle('zoomed');};
+    if(type==='image') {
+      $('#preview-zoom').remove();
+      const controls=$('.preview-controls');
+      for(const [id,label] of [['in','Inzoomen'],['out','Uitzoomen'],['fit','Passend'],['width','Breedte'],['height','Hoogte']]) {
+        const button=document.createElement('button');button.className='secondary';button.id='image-'+id;button.textContent=label;
+        button.onclick=()=>{if(id==='in'||id==='out')imageViewer.zoom(id==='in'?1.5:1/1.5);else imageViewer.select(id);};controls.append(button);
+      }
+      const status=document.createElement('output');status.id='image-scale';status.setAttribute('aria-label','Zoomniveau');controls.append(status);
+      imageViewer=bindImageViewer($('.preview-image'),$('.image-viewport'),{
+        initialMode:imageFitMode,
+        change:({scale,mode})=>{status.textContent=Math.round(scale*100)+'%';imageFitMode=['width','height'].includes(mode)?mode:'fit';for(const key of ['fit','width','height'])$('#image-'+key).setAttribute('aria-pressed',String(mode===key));},
+        error:()=>toast('Je browser kan deze afbeelding niet weergeven.',true),
+      });
+    } else $('#preview-zoom').hidden=true;
     if(type==='video') {
       const controls=$('.preview-controls');
       for(const [setting,label] of [['loop','Video herhalen'],['autonext','Automatisch volgende video']]) {
@@ -354,7 +368,7 @@ async function openFile(item, index, forceText=false) {
       if(!matchMedia('(pointer: coarse)').matches)videoPlayback.play();
     }
     const surface=$('.preview-image')||$('.preview-video');let touchStart;
-    surface.addEventListener('touchstart',e=>touchStart=e.touches[0].clientX,{passive:true});surface.addEventListener('touchend',e=>{const delta=e.changedTouches[0].clientX-touchStart;if(Math.abs(delta)>60)(delta<0?currentMedia.next:currentMedia.previous)();},{passive:true});
+    surface.addEventListener('touchstart',e=>touchStart=e.touches[0].clientX,{passive:true});surface.addEventListener('touchend',e=>{const delta=e.changedTouches[0].clientX-touchStart;if((!imageViewer||imageViewer.canSwipe())&&Math.abs(delta)>60)(delta<0?currentMedia.next:currentMedia.previous)();},{passive:true});
     return;
   }
   let data;
@@ -573,6 +587,7 @@ document.addEventListener('click', e => { if (!e.target.closest('.menu')) $('.me
 on(document,'keydown',async e=>{
   if(e.key==='Escape')$('.menu')?.remove();
   if(e.target.closest('input,textarea,[contenteditable]'))return;
+  if(imageViewer&&!imageViewer.canSwipe()&&e.target.closest('.image-viewport')&&['ArrowRight','ArrowLeft','ArrowUp','ArrowDown',' '].includes(e.key))return;
   if(currentMedia){if(['ArrowRight','ArrowDown',' '].includes(e.key)){e.preventDefault();currentMedia.next();}if(['ArrowLeft','ArrowUp','Backspace'].includes(e.key)){e.preventDefault();currentMedia.previous();}return;}
   if($('#dialog').open||!state.user)return;
   if((e.ctrlKey||e.metaKey)&&['c','x'].includes(e.key)&&active().selected.size){e.preventDefault();clipboard={items:active().items.filter(i=>active().selected.has(i.path)),operation:e.key==='c'?'copy':'move'};renderPanes();}
