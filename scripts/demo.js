@@ -15,6 +15,7 @@ await fs.writeFile(path.join(instance.root,'Documenten','Voorbeeld.pdf'),sampleP
 await fs.copyFile(path.resolve(import.meta.dirname,'../test/fixtures/pdf/jpeg2000.pdf'),path.join(instance.root,'Documenten','JPEG2000.pdf'));
 await fs.writeFile(path.join(instance.root,'Geluidstest.wav'),sampleWav());
 await fs.writeFile(path.join(instance.root,'Geluidstest-2.wav'),sampleWav());
+await fs.writeFile(path.join(instance.root,'Seektest.wav'),sampleWav(30));
 for(const [source,name] of [['blue.mp4','Video-1.mp4'],['green.mp4','Video-2.mp4']]) {
   await fs.copyFile(path.resolve(import.meta.dirname,'../test/fixtures/media',source),path.join(instance.root,name));
 }

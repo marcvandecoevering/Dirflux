@@ -10,8 +10,10 @@ export function samplePdf() {
   pdf+=`xref\n0 6\n0000000000 65535 f \n${offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(pdf);
 }
-export function sampleWav() {
-  const data=Buffer.alloc(44+16000);data.write('RIFF');data.writeUInt32LE(data.length-8,4);data.write('WAVEfmt ',8);data.writeUInt32LE(16,16);data.writeUInt16LE(1,20);data.writeUInt16LE(1,22);data.writeUInt32LE(8000,24);data.writeUInt32LE(16000,28);data.writeUInt16LE(2,32);data.writeUInt16LE(16,34);data.write('data',36);data.writeUInt32LE(16000,40);
-  for(let i=0;i<8000;i++)data.writeInt16LE(Math.round(Math.sin(i/8000*Math.PI*2*440)*1000),44+i*2);
+export function sampleWav(seconds=1) {
+  if(!Number.isInteger(seconds)||seconds<1||seconds>120)throw new Error('Fixture duration must be 1..120 seconds.');
+  const samples=8000*seconds;
+  const data=Buffer.alloc(44+samples*2);data.write('RIFF');data.writeUInt32LE(data.length-8,4);data.write('WAVEfmt ',8);data.writeUInt32LE(16,16);data.writeUInt16LE(1,20);data.writeUInt16LE(1,22);data.writeUInt32LE(8000,24);data.writeUInt32LE(16000,28);data.writeUInt16LE(2,32);data.writeUInt16LE(16,34);data.write('data',36);data.writeUInt32LE(samples*2,40);
+  for(let i=0;i<samples;i++)data.writeInt16LE(Math.round(Math.sin(i/8000*Math.PI*2*440)*1000),44+i*2);
   return data;
 }

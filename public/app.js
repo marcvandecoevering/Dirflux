@@ -445,13 +445,13 @@ async function openPdf(item) {
 function playAudio(item,index) {
   audioItems=state.panes[index].items.filter(isAudio);audioIndex=audioItems.findIndex(i=>i.path===item.path);
   let bar=$('#audio-bar');
-  if(!bar){bar=document.createElement('div');bar.id='audio-bar';bar.className='audio-bar';bar.innerHTML='<button id="audio-prev" aria-label="Previous track">◀</button><button id="audio-next" aria-label="Next track">▶</button><button id="audio-shuffle" aria-label="Shuffle">⤨</button><span id="audio-title"></span><audio id="audio-player" controls></audio><button id="audio-stop" aria-label="Stop">×</button>';document.body.append(bar);}
+  if(!bar){bar=document.createElement('div');bar.id='audio-bar';bar.className='audio-bar';bar.innerHTML='<button id="audio-prev" aria-label="Previous track">◀</button><button id="audio-next" aria-label="Next track">▶</button><button id="audio-shuffle" aria-label="Shuffle" aria-pressed="false">⤨</button><span id="audio-title"></span><audio id="audio-player" controls></audio><button id="audio-stop" aria-label="Stop">×</button>';document.body.append(bar);}
   $('#shell').classList.add('has-audio');
   const player=$('#audio-player');
   const recovery=audioFailureRecovery(audioItems.length);let generation=0,stopped=false;
   function start(){const track=audioItems[audioIndex],request=++generation;$('#audio-title').textContent=track.name;player.src='/api/file?path='+encodeURIComponent(track.path);player.play().catch(error=>{if(!stopped&&request===generation&&error.name==='NotAllowedError')toast('Druk op afspelen om de audio te starten.');});}
   function next(delta){audioIndex=nextTrack(audioIndex,audioItems.length,delta,$('#audio-shuffle').classList.contains('toggle-active'));start();}
-  $('#audio-prev').onclick=()=>next(-1);$('#audio-next').onclick=()=>next(1);$('#audio-shuffle').onclick=e=>e.currentTarget.classList.toggle('toggle-active');
+  $('#audio-prev').onclick=()=>next(-1);$('#audio-next').onclick=()=>next(1);$('#audio-shuffle').onclick=e=>{const enabled=e.currentTarget.classList.toggle('toggle-active');e.currentTarget.setAttribute('aria-pressed',String(enabled));};
   player.onended=()=>next(1);
   player.onplaying=()=>recovery.reset();
   player.onerror=()=>{
