@@ -4,7 +4,7 @@ Reference: droppy 12.2.0, commit `70b61d1ac7c2ce8045e07f4716b6a01abadf6296`, REA
 
 | Original option | Current equivalent or difference | Status |
 | --- | --- | --- |
-| `listeners` | `HOST`, `PORT`, optional `TLS_CERT_FILE`/`TLS_KEY_FILE`; one HTTP or HTTPS listener. Default loopback:8094 instead of all interfaces:8989. | Multiple listeners and Unix sockets are not implemented. |
+| `listeners` | `HOST`, `PORT`, optional `LISTENERS` JSON array for multiple TCP endpoints or Unix sockets on Linux/macOS. All endpoints share `TLS_CERT_FILE`/`TLS_KEY_FILE`. Default loopback:8094 instead of all interfaces:8989. | Multiple endpoints implemented; per-listener TLS certificates and mixed HTTP/HTTPS remain unsupported. |
 | `public` | `PUBLIC_MODE`, false by default. Public visitors receive bounded guest sessions with CSRF checks. | Implemented and tested; intentional authentication implementation difference. |
 | `timestamps` | `LOG_TIMESTAMPS`, true by default, adds UTC ISO timestamps to JSON-line application logs. | Implemented and tested. |
 | `linkLength` | Fixed 32 random bytes, encoded as 43 URL-safe characters, instead of five-character defaults. | Intentional security change; short configurable tokens are not offered. |
@@ -23,6 +23,12 @@ Reference: droppy 12.2.0, commit `70b61d1ac7c2ce8045e07f4716b6a01abadf6296`, REA
 | `headers` | Fixed application security headers and the supplied reverse-proxy configuration. | Arbitrary application response-header configuration is not implemented. |
 
 Additional settings include separate files/config directories, text-edit limits, secure-cookie enforcement and a live guest-session cap. See the README for their supported values. A proxy may provide deployment capabilities, but its availability alone does not establish equivalent application behavior.
+
+## Listener checks
+
+`test/listeners.test.js` verifies two real TCP listeners share a session, health probes reach each endpoint, shutdown closes both, and a failed second bind rolls back the first without stopping the existing server. On Linux, a real Unix socket serves the health route and is removed on normal close; a pre-existing ordinary file is preserved when binding its path fails. Invalid endpoint shapes and ports fail configuration validation before application startup. The full Linux amd64 suite passed 113/113 with these changes, including the recent structured-logging tests. The rebuilt image also passed the restricted UID/GID 99:100 container smoke (startup, upload, duplicate-instance rejection, persistence across restart and a read-only shared mount).
+
+Unix sockets inherit filesystem permissions/umask; deployment must provide a restricted parent directory outside shared files. Windows rejects Unix socket configuration explicitly. Mixed HTTP/HTTPS, separate certificates per listener, native macOS socket verification and proxy-to-Unix-socket deployment are still open checks or capabilities; the evidence above does not establish them.
 
 ## Extension-link checks
 

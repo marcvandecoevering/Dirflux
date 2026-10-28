@@ -1,6 +1,7 @@
 import {createAttemptLimiter} from './lib/rate-limit.js';
 import {createEventSink} from './lib/event-sink.js';
 import {createLogger} from './lib/logger.js';
+import {listenerSettings,startListeners,closeListeners} from './lib/listeners.js';
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
@@ -695,10 +696,13 @@ export async function createApp(options = {}) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const endpoints=listenerSettings();
   const instance = await createApp();
   if (instance.setupTokenRequired) instance.logger.info('setup.required',{message:'Enter the code from the setup-token file in CONFIG_DIR.'});
-  const host = process.env.HOST || '127.0.0.1';
-  const port = Number(process.env.PORT ?? 8094);
-  const server = instance.listen(port, host, () => instance.logger.info('server.listening',{protocol:instance.protocol,host,port:server.address().port}));
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {instance.stopEvents();server.close(() => { instance.close(); process.exit(0); });});
+  let servers;
+  try {servers=await startListeners(instance,endpoints);}
+  catch(error){instance.close();throw error;}
+  for(const server of servers)instance.logger.info('server.listening',{protocol:instance.protocol,...(typeof server.address()==='string'?{path:server.address()}:{host:server.address().address,port:server.address().port})});
+  let stopping=false;
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {if(stopping)return;stopping=true;instance.stopEvents();await closeListeners(servers);instance.close();process.exit(0);});
 }
