@@ -3,6 +3,7 @@ import {createEventSink} from './lib/event-sink.js';
 import {createLogger} from './lib/logger.js';
 import {responseHeaders} from './lib/response-headers.js';
 import {listenerSettings,startListeners,closeListeners} from './lib/listeners.js';
+import {canInlineFile} from './public/file-types.js';
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
@@ -339,7 +340,7 @@ export async function createApp(options = {}) {
       let inline=false;
       if(req.query.download==='0') {
         const ext=path.extname(absolute).toLowerCase();
-        inline=['.png','.apng','.ico','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac','.pdf'].includes(ext);
+        inline=(canInlineFile(absolute)||ext==='.pdf');
         if(!inline&&(await handle.stat()).size<2*1024**2) {
           let bytes;
           try {bytes=await readLimitedHandle(handle,2*1024**2);} catch(error) {if(error.status!==413)throw error;}
@@ -459,7 +460,7 @@ export async function createApp(options = {}) {
     if(pdfOnly&&ext!=='.pdf')throw fail(415,'Dit is geen PDF-bestand.');
     // Pin the opened file for the entire response, including HEAD/range handling.
     // Never render user-controlled HTML/SVG/scripts under the application origin.
-    const inline=!pdfOnly&&req.query.download!=='1'&&['.png','.apng','.ico','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac'].includes(ext);
+    const inline=!pdfOnly&&req.query.download!=='1'&&canInlineFile(absolute);
     const handle=await fsp.open(absolute,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));
     try {await sendOpenedFile(req,res,handle,path.basename(absolute),inline);}
     finally {await handle.close();}

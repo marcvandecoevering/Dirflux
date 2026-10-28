@@ -2,6 +2,7 @@ import { bindImageViewer } from './image-viewer.js';
 import { fileShortcut } from './file-shortcuts.js';
 import { canEditSession } from './session-permissions.js';
 import { galleryShortcut } from './gallery-shortcuts.js';
+import { isImage } from './file-types.js';
 import { dropOperation, readInternalDrop, dropTransfer } from './internal-drop.js';
 import { isAudio, isVideo, nextTrack, audioFailureRecovery, bindVideoPlayback } from './media-playback.js';
 const $ = selector => document.querySelector(selector);
@@ -22,7 +23,7 @@ const active = () => state.panes[state.active];
 const canWrite = () => canEditSession(state);
 const size = n => n < 1024 ? n + ' B' : n < 1024 ** 2 ? (n / 1024).toFixed(1) + ' KB' : n < 1024 ** 3 ? (n / 1024 ** 2).toFixed(1) + ' MB' : (n / 1024 ** 3).toFixed(1) + ' GB';
 const date = n => new Intl.DateTimeFormat('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' }).format(n);
-const kind = item => item.directory ? 'folder' : /\.(png|apng|ico|svg|jpe?g|gif|webp|avif|bmp)$/i.test(item.name) ? 'image' : /\.(mp4|webm|ogv|mp3|wav|ogg|m4a|flac)$/i.test(item.name) ? 'media' : 'file';
+const kind = item => item.directory ? 'folder' : isImage(item) ? 'image' : isAudio(item)||isVideo(item) ? 'media' : 'file';
 let toastTimer, closeHook = null, refreshBusy = false;
 const uploadJobs = new Set();
 let uploadConflictQueue = Promise.resolve();
@@ -545,14 +546,14 @@ function syncVideoControls() {
   }
 }
 async function openFile(item, index, forceText=false) {
-  if(!viewerMode && !/\.(mp3|wav|ogg|m4a|flac)$/i.test(item.name)) {
+  if(!viewerMode && !isAudio(item)) {
     const pane=state.panes[index];pane.open={item,forceText};renderPane(index);recordLocation();return;
   }
   const url = '/api/file?path=' + encodeURIComponent(item.path);
-  if (!forceText && /\.(mp3|wav|ogg|m4a|flac)$/i.test(item.name)) return playAudio(item,index);
+  if (!forceText && isAudio(item)) return playAudio(item,index);
   if (!forceText && /\.pdf$/i.test(item.name)) return openPdf(item);
   if (!forceText && ['image','media'].includes(kind(item))) {
-    const type = kind(item) === 'image' ? 'image' : /\.(mp3|wav|ogg|m4a|flac)$/i.test(item.name) ? 'audio' : 'video';
+    const type = isImage(item) ? 'image' : 'video';
     showDialog(item.name, `${type === 'image' ? `<div class="image-viewport" tabindex="0" aria-label="Afbeelding verschuiven"><img class="preview-image" src="${url}" alt="${escape(item.name)}" draggable="false"></div>` : `<${type} class="preview-${type}" src="${url}" controls></${type}>`}<div class="preview-controls"><button class="secondary" id="preview-prev">← Vorige</button><button class="secondary" id="preview-download">Download</button><button class="secondary" id="preview-zoom">Zoom</button><button class="secondary" id="fullscreen">Vergroten</button><button class="secondary" id="preview-next">Volgende →</button></div>`, 'preview-dialog');
     const peers = state.panes[index].items.filter(i => type === 'video' ? isVideo(i) : kind(i) === 'image'); const at = peers.findIndex(i => i.path === item.path);
     $('#preview-prev').disabled = at <= 0; $('#preview-next').disabled = at >= peers.length - 1;

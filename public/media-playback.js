@@ -1,5 +1,4 @@
-export const isAudio = item => !item.directory && /\.(mp3|wav|ogg|m4a|flac)$/i.test(item.name);
-export const isVideo = item => !item.directory && /\.(mp4|webm|ogv)$/i.test(item.name);
+export {isAudio,isVideo} from './file-types.js';
 
 export function nextTrack(index, length, delta = 1, shuffle = false, random = Math.random) {
   if (length <= 1) return 0;
