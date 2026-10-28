@@ -56,6 +56,9 @@ jobs:
         run: >-
           docker run --rm --read-only --cap-drop=ALL --security-opt no-new-privileges
           --tmpfs /tmp:rw,noexec,nosuid,size=512m
+          --tmpfs /cross-files:rw,noexec,nosuid,size=32m,mode=1777
+          --tmpfs /cross-files/volume:rw,noexec,nosuid,size=32m,mode=1777
+          -e FILE_APP_CROSS_VOLUME_TEST=1
           --mount "type=bind,src=${{ github.workspace }}/test,dst=/app/test,readonly"
           --mount "type=bind,src=${{ github.workspace }}/scripts,dst=/app/scripts,readonly"
           --entrypoint node local/file-app-ci --test
