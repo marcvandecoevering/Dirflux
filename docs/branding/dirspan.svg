@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+<title id="title">Dirspan — twee vensters met een verbinding</title>
+<rect width="128" height="128" rx="28" fill="#102e35"/>
+<path d="M51 28H31a7 7 0 0 0-7 7v58a7 7 0 0 0 7 7h20M77 28h20a7 7 0 0 1 7 7v58a7 7 0 0 1-7 7H77" fill="none" stroke="#65e0bb" stroke-width="10" stroke-linecap="square"/>
+<path d="M43 64h42m-9-10 10 10-10 10" fill="none" stroke="#fff" stroke-width="8" stroke-linejoin="miter"/>
+</svg>
