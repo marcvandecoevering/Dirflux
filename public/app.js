@@ -685,9 +685,12 @@ $('#dialog-close').onclick = closeDialog;
 $('#dialog').addEventListener('cancel', e => { e.preventDefault(); closeDialog(); });
 document.addEventListener('click', e => { if (!e.target.closest('.menu')) $('.menu')?.remove(); });
 on(document,'keydown',async e=>{
+  if(e.defaultPrevented)return;
   if(e.key==='Escape')$('.menu')?.remove();
-  if(e.target.closest('input,textarea,[contenteditable]'))return;
+  if(e.target.closest('input,textarea,select,[contenteditable]'))return;
   if(imageViewer&&!imageViewer.canSwipe()&&e.target.closest('.image-viewport')&&['ArrowRight','ArrowLeft','ArrowUp','ArrowDown',' '].includes(e.key))return;
+  // Gallery navigation must not consume native playback/seeking or Space on a focused button.
+  if(currentMedia&&(e.altKey||e.ctrlKey||e.metaKey||e.target.closest('audio,video,[role="slider"]')||([' ','Enter'].includes(e.key)&&e.target.closest('button,a[href],summary,[role="button"]'))))return;
   if(currentMedia){if(['ArrowRight','ArrowDown',' '].includes(e.key)){e.preventDefault();currentMedia.next();}if(['ArrowLeft','ArrowUp','Backspace'].includes(e.key)){e.preventDefault();currentMedia.previous();}return;}
   if($('#dialog').open||!state.user)return;
   if((e.ctrlKey||e.metaKey)&&['c','x'].includes(e.key)&&active().selected.size){e.preventDefault();clipboard={items:active().items.filter(i=>active().selected.has(i.path)),operation:e.key==='c'?'copy':'move'};renderPanes();}
