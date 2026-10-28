@@ -385,8 +385,18 @@ async function action(actionName, item, index) {
 }
 async function transfer(items, operation) {
   const other = state.panes[state.active === 0 ? 1 : 0];
+  let completed=0;
   return formDialog(operation === 'copy' ? 'Bestanden kopiëren' : 'Bestanden verplaatsen', `<label>Doelmap<input name="destination" value="${escape(other?.path || '')}" placeholder="Leeg = hoofdmap"></label>`, operation === 'copy' ? 'Kopiëren' : 'Verplaatsen', async form => {
-    for (const item of items) await api('/transfer', { method:'POST', body:{ source:item.path, target:join(form.get('destination').replace(/^\/+|\/+$/g, ''), item.name), operation, conflict:'rename' } });
+    const destination=form.get('destination').replace(/^\/+|\/+$/g, '');
+    const destinationField=$('#modal-form [name="destination"]');
+    try {
+      while(completed<items.length){
+        const item=items[completed];
+        await api('/transfer', { method:'POST', body:{ source:item.path, target:join(destination, item.name), operation, conflict:'rename' } });
+        completed++;
+        destinationField.readOnly=true;
+      }
+    }catch(error){throw new Error(`${completed} van ${items.length} verwerkt. Opnieuw proberen verwerkt alleen de resterende bestanden. ${error.message}`);}
     active().selected.clear(); toast(`${items.length} item(s) ${operation === 'copy' ? 'gekopieerd' : 'verplaatst'}.`);
   }, `${items.length} item(s). Voer een bestaande map in, bijvoorbeeld Documenten/Archief. Bij een naamconflict wordt een vrije naam gekozen; beide items blijven bewaard.`);
 }
