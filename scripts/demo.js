@@ -20,6 +20,7 @@ for(const [source,name] of [['blue.mp4','Video-1.mp4'],['green.mp4','Video-2.mp4
   await fs.copyFile(path.resolve(import.meta.dirname,'../test/fixtures/media',source),path.join(instance.root,name));
 }
 await fs.copyFile(path.resolve(import.meta.dirname,'../public/original/logo192.png'),path.join(instance.root,'Foto’s','Droppy.png'));
+for(const file of ['animated.apng','icon.ico','vector.svg'])await fs.copyFile(path.resolve(import.meta.dirname,'../test/fixtures/images',file),path.join(instance.root,'Foto’s',file));
 const server = instance.listen(18094,'127.0.0.1');
 await new Promise(resolve=>server.once('listening',resolve));
 const setupToken=(await fs.readFile(path.join(instance.config,'setup-token'),'utf8')).trim();

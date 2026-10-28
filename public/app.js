@@ -22,7 +22,7 @@ const active = () => state.panes[state.active];
 const canWrite = () => canEditSession(state);
 const size = n => n < 1024 ? n + ' B' : n < 1024 ** 2 ? (n / 1024).toFixed(1) + ' KB' : n < 1024 ** 3 ? (n / 1024 ** 2).toFixed(1) + ' MB' : (n / 1024 ** 3).toFixed(1) + ' GB';
 const date = n => new Intl.DateTimeFormat('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' }).format(n);
-const kind = item => item.directory ? 'folder' : /\.(png|jpe?g|gif|webp|avif|bmp)$/i.test(item.name) ? 'image' : /\.(mp4|webm|ogv|mp3|wav|ogg|m4a|flac)$/i.test(item.name) ? 'media' : 'file';
+const kind = item => item.directory ? 'folder' : /\.(png|apng|ico|svg|jpe?g|gif|webp|avif|bmp)$/i.test(item.name) ? 'image' : /\.(mp4|webm|ogv|mp3|wav|ogg|m4a|flac)$/i.test(item.name) ? 'media' : 'file';
 let toastTimer, closeHook = null, refreshBusy = false;
 const uploadJobs = new Set();
 let uploadConflictQueue = Promise.resolve();
@@ -589,6 +589,7 @@ async function openFile(item, index, forceText=false) {
     }
     const surface=$('.preview-image')||$('.preview-video');let touchStart;
     surface.addEventListener('touchstart',e=>touchStart=e.touches[0].clientX,{passive:true});surface.addEventListener('touchend',e=>{const delta=e.changedTouches[0].clientX-touchStart;if((!imageViewer||imageViewer.canSwipe())&&Math.abs(delta)>60)(delta<0?currentMedia.next:currentMedia.previous)();},{passive:true});
+    if(viewerMode)window.parent.postMessage({type:'droppy-media-location',path:item.path},location.origin);
     return;
   }
   let data;
@@ -856,10 +857,19 @@ if(viewerMode){
   });
 }
 window.addEventListener('message',async e=>{
-  if(e.origin!==location.origin||!['droppy-close','droppy-fullscreen','droppy-drop-open'].includes(e.data?.type))return;
+  if(e.origin!==location.origin||!['droppy-close','droppy-fullscreen','droppy-drop-open','droppy-media-location'].includes(e.data?.type))return;
   const index=state.panes.findIndex((p,i)=>$(`[data-pane="${i}"] iframe`)?.contentWindow===e.source);
   if(index<0)return;
   try {
+    if(e.data.type==='droppy-media-location'){
+      const pane=state.panes[index];
+      const item=pane.items.find(item=>item.path===e.data.path&&!item.directory&&(kind(item)==='image'||isVideo(item)));
+      if(!pane.open||pane.open.forceText||!item||pane.open.item.path===item.path)return;
+      pane.open.item=item;
+      const element=$(`[data-pane="${index}"]`);element.querySelector('iframe').title=item.name;
+      const label=element.querySelector('.breadcrumbs button[title="Close file"]');if(label)label.textContent=item.name;
+      recordLocation(true);return;
+    }
     if(e.data.type==='droppy-drop-open'){await openDroppedItem(e.data.raw,index);return;}
     if(e.data.type==='droppy-fullscreen'){await togglePaneFullscreen(index);return;}
     await leavePaneFullscreen($(`[data-pane="${index}"]`));
