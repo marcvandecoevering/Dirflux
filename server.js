@@ -1,5 +1,6 @@
 import {createAttemptLimiter} from './lib/rate-limit.js';
 import {createEventSink} from './lib/event-sink.js';
+import {createLogger} from './lib/logger.js';
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
@@ -61,6 +62,7 @@ export async function createApp(options = {}) {
   const uploadTimeout = byteLimit(options.uploadTimeout ?? process.env.UPLOAD_TIMEOUT_MS ?? 604800000,'UPLOAD_TIMEOUT_MS',1,2147483647);
   const updateInterval = byteLimit(options.updateInterval ?? process.env.UPDATE_INTERVAL_MS ?? 1000,'UPDATE_INTERVAL_MS',0,2147483647);
   const keepAlive = byteLimit(options.keepAlive ?? process.env.KEEP_ALIVE_MS ?? 20000,'KEEP_ALIVE_MS',0,2147483647);
+  const logger=createLogger({level:byteLimit(options.logLevel??process.env.LOG_LEVEL??2,'LOG_LEVEL',0,3),timestamps:booleanSetting(options.logTimestamps??process.env.LOG_TIMESTAMPS??true,'LOG_TIMESTAMPS'),write:options.logWriter});
   let ignorePatterns = options.ignorePatterns;
   if (ignorePatterns === undefined) {
     try { ignorePatterns = JSON.parse(process.env.IGNORE_PATTERNS || '[]'); }
@@ -125,14 +127,22 @@ export async function createApp(options = {}) {
   if (watchEnabled === true || watchEnabled === 'true') {
     try {
       watcher = fs.watch(realRoot, { recursive:true }, notifyChange);
-      watcher.on('error', error => { console.error('Filesystem watcher:', error.message);watcher.close();notifyChange(); });
-    } catch(error) { console.error('Filesystem watcher unavailable:', error.message); }
+      watcher.on('error', error => { logger.error('filesystem.watch_failed',{code:error.code||'UNKNOWN'});watcher.close();notifyChange(); });
+    } catch(error) { logger.error('filesystem.watch_unavailable',{code:error.code||'UNKNOWN'}); }
   }
   // Periodic invalidation also covers network mounts that do not deliver fs.watch events.
   const pollTimer = pollingInterval ? setInterval(notifyChange, pollingInterval) : undefined;
   pollTimer?.unref();
   cleanupStartup = () => {watcher?.close();clearTimeout(watchTimer);clearInterval(pollTimer);for(const client of eventClients)client.end();};
   app.disable('x-powered-by');
+  app.use((req,res,next)=>{
+    const started=performance.now();
+    res.once('finish',()=>logger.info('http.request',{
+      method:req.method,route:typeof req.route?.path==='string'?req.route.path:'unmatched',
+      status:res.statusCode,durationMs:Math.round(performance.now()-started),
+    }));
+    next();
+  });
   const attempts = createAttemptLimiter();
   const publicUser = u => ({ id: u.id, name: u.name, role: u.role, ...(u.guest?{guest:true}:{}) });
   const countUsers = () => db.prepare('SELECT count(*) AS n FROM users').get().n;
@@ -342,10 +352,11 @@ export async function createApp(options = {}) {
     const sink=createEventSink(res,validSession);
     const client={change:()=>sink.change(),end:()=>{sink.close();res.end();}};
     eventClients.add(client);
+    logger.debug('events.connected',{connections:eventClients.size});
     const heartbeat=keepAlive?setInterval(()=>{if(validSession())sink.heartbeat();},keepAlive):undefined;
     // Disabling/slowing keepalive must not disable session expiry/revocation checks.
     const sessionCheck=!keepAlive||keepAlive>20000?setInterval(validSession,20000):undefined;
-    res.on('close',()=>{sink.close();clearInterval(heartbeat);clearInterval(sessionCheck);eventClients.delete(client);});
+    res.on('close',()=>{sink.close();clearInterval(heartbeat);clearInterval(sessionCheck);eventClients.delete(client);logger.debug('events.disconnected',{connections:eventClients.size});});
   });
   const admin = (req, _res, next) => next(req.auth.role !== 'admin' ? fail(403, 'Alleen voor beheerders.') : undefined);
   // Serialize filesystem commits. Receiving an upload must not lock out other users.
@@ -671,12 +682,12 @@ export async function createApp(options = {}) {
     const mapped = known[error.code];
     const duplicate = String(error.message).includes('UNIQUE constraint failed');
     const status = mapped?.[0] || (duplicate ? 409 : error.status || 500);
-    if (status >= 500) console.error(error.code || error.name, error.message);
+    if (status >= 500) logger.error('http.error',{code:error.code||'INTERNAL_ERROR',status});
     res.status(status).json({ error: mapped?.[1] || (duplicate ? 'Deze gebruikersnaam bestaat al.' : status === 500 ? 'Er ging iets mis op de server.' : error.message) });
   });
   const stopEvents = cleanupStartup;
   const listen=(...args)=>(tlsOptions?createHttpsServer:createServer)({...tlsOptions,requestTimeout:Math.max(300000,uploadTimeout),headersTimeout:60000},app).listen(...args);
-  return { app, listen, protocol:tlsOptions?'https':'http', stopEvents, close: () => {if(closed)return;closed=true;stopEvents();try{db.close();}finally{instanceLock.close();}}, root, config, setupTokenRequired: !countUsers() };
+  return { app, listen, logger, protocol:tlsOptions?'https':'http', stopEvents, close: () => {if(closed)return;closed=true;stopEvents();try{db.close();}finally{instanceLock.close();}}, root, config, setupTokenRequired: !countUsers() };
   } catch (error) {
     try { cleanupStartup(); database?.close(); } finally { instanceLock.close(); }
     throw error;
@@ -685,9 +696,9 @@ export async function createApp(options = {}) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const instance = await createApp();
-  if (instance.setupTokenRequired) console.log('Initial setup: enter the code from the setup-token file in CONFIG_DIR.');
+  if (instance.setupTokenRequired) instance.logger.info('setup.required',{message:'Enter the code from the setup-token file in CONFIG_DIR.'});
   const host = process.env.HOST || '127.0.0.1';
   const port = Number(process.env.PORT ?? 8094);
-  const server = instance.listen(port, host, () => console.log(`Droppy Next: ${instance.protocol}://${host}:${server.address().port}`));
+  const server = instance.listen(port, host, () => instance.logger.info('server.listening',{protocol:instance.protocol,host,port:server.address().port}));
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {instance.stopEvents();server.close(() => { instance.close(); process.exit(0); });});
 }

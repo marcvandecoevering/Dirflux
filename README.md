@@ -83,6 +83,8 @@ All users share one file tree; accounts do not provide isolated home directories
 
 The [original configuration comparison](docs/CONFIG_PARITY.md) records supported equivalents, intentional differences and remaining gaps.
 
+Application logs are JSON lines, with errors on stderr and other levels on stdout. HTTP records contain the method, route template, status and elapsed milliseconds, not the raw URL, file path, query, headers, body or share ID. Error records use error codes rather than potentially private exception messages. This does not control Node runtime warnings, failures before application startup, or logs produced by your reverse proxy. Configure log rotation in Docker or your service manager; the application does not create its own log files.
+
 Environment variables are read from the process. To use `.env`, copy `.env.example`, edit it, build assets, and run `node --env-file=.env server.js`.
 
 | Variable | Default | Meaning |
@@ -94,6 +96,8 @@ Environment variables are read from the process. To use `.env`, copy `.env.examp
 | `MAX_UPLOAD_BYTES` | `10737418240` | Maximum upload size, 10 GiB by default; `0` removes the application size limit |
 | `MAX_TEXT_BYTES` | `2097152` | Maximum UTF-8 editor file size in bytes; configurable from 1 byte to 64 MiB |
 | `LINK_EXTENSIONS` | `false` | Append the target's extension to displayed public share URLs; existing suffixed and unsuffixed URLs remain valid until expiry/revocation |
+| `LOG_LEVEL` | `2` | Application JSON-line logs: 0 off, 1 errors, 2 startup/HTTP requests, 3 live-connection diagnostics |
+| `LOG_TIMESTAMPS` | `true` | Include UTC ISO timestamps in application log records |
 | `UPLOAD_TIMEOUT_MS` | `604800000` | Maximum time to receive an authenticated upload, 7 days by default; integer from 1 to 2147483647 ms |
 | `READ_ONLY` | `false` | Deny file changes and new public links |
 | `MAX_PUBLIC_SESSIONS` | `1000` | Maximum live guest sessions (1–1000000); existing sessions and account login remain available at capacity |

@@ -6,10 +6,10 @@ Reference: droppy 12.2.0, commit `70b61d1ac7c2ce8045e07f4716b6a01abadf6296`, REA
 | --- | --- | --- |
 | `listeners` | `HOST`, `PORT`, optional `TLS_CERT_FILE`/`TLS_KEY_FILE`; one HTTP or HTTPS listener. Default loopback:8094 instead of all interfaces:8989. | Multiple listeners and Unix sockets are not implemented. |
 | `public` | `PUBLIC_MODE`, false by default. Public visitors receive bounded guest sessions with CSRF checks. | Implemented and tested; intentional authentication implementation difference. |
-| `timestamps` | Startup and error output uses console logging without an application timestamp switch. | Not matched. |
+| `timestamps` | `LOG_TIMESTAMPS`, true by default, adds UTC ISO timestamps to JSON-line application logs. | Implemented and tested. |
 | `linkLength` | Fixed 32 random bytes, encoded as 43 URL-safe characters, instead of five-character defaults. | Intentional security change; short configurable tokens are not offered. |
 | `linkExtensions` | `LINK_EXTENSIONS`, false by default. Displays the current target's final extension, URI-encoded. The stored random ID stays unchanged. | Implemented; see checks below. |
-| `logLevel` | Startup/error logging only, no request/debug verbosity setting. | Not matched. |
+| `logLevel` | `LOG_LEVEL`: 0 off, 1 errors, 2 startup/requests, 3 live-connection diagnostics. Requests use route templates and omit private parameters, headers and bodies. | Implemented and tested; structured format replaces the original text/WebSocket logging. |
 | `maxFileSize` | `MAX_UPLOAD_BYTES`; zero is unlimited. Default 10 GiB rather than unlimited. | Implemented and tested; default differs. |
 | `updateInterval` | `UPDATE_INTERVAL_MS`, default 1000 ms, zero sends immediately. Native and polling notifications share a coalescing window whose deadline is not reset by later changes. | Implemented; continuous polling and bounded event delivery tested. |
 | `pollingInterval` | `POLLING_INTERVAL_MS`, default 15 seconds, zero disables. Periodic invalidation/SSE refresh instead of recursively polling every file. | Equivalent refresh intent, different implementation/default; actual SMB/NFS evaluation pending. |
