@@ -29,7 +29,7 @@ New empty storage folders are prepared automatically. No XML download, console c
 
    | Config Type | Name (display label) | Container Port / Container Path / Key | Host Port / Host Path / Value | Other setting |
    | --- | --- | --- | --- | --- |
-   | Port | Web interface | `8080` | `8094` | Connection Type: `TCP` |
+   | Port | Web interface | `8080` | `8080` | Connection Type: `TCP` |
    | Path | Files | `/files` | `/mnt/user/dirflux` | Access Mode: `Read/Write` |
    | Path | Appdata | `/config` | `/mnt/user/appdata/dirflux` | Access Mode: `Read/Write` |
    | Variable | Initial administrator password | `INITIAL_ADMIN_PASSWORD` | Your chosen password, 12–1024 characters | Required for a new installation |
@@ -38,9 +38,9 @@ New empty storage folders are prepared automatically. No XML download, console c
 
    For example, **Initial administrator password** is the label, `INITIAL_ADMIN_PASSWORD` is the **Key**, and your password is the **Value**. Container Path must be `/config`, not `config`. Enter values without backticks or quotation marks. Keep the WebUI placeholders literally as shown; Unraid replaces them with your server address and host port.
 
-   Choose another **host port** if 8094 is occupied; leave **container port** at 8080. You may choose a different Files host folder. Keep Files and Appdata separate, with neither inside the other.
+   Choose another **host port** if 8080 is occupied; leave **container port** at 8080. You may choose a different Files host folder. Keep Files and Appdata separate, with neither inside the other.
 
-5. Click **Apply**. Unraid automatically downloads the image from GHCR and starts the container. Wait for startup, then open **WebUI** from the container menu, or visit `http://YOUR-SERVER:8094` using your chosen host port. Sign in as `admin` with the password you entered.
+5. Click **Apply**. Unraid automatically downloads the image from GHCR and starts the container. Wait for startup, then open **WebUI** from the container menu, or visit `http://YOUR-SERVER:8080` using your chosen host port. Sign in as `admin` with the password you entered.
 
 The [Apps template](https://github.com/marcvandecoevering/unraid-templates/blob/main/templates/dirflux.xml) also supplies restricted container settings automatically. For the same restrictions in a manual installation, use Advanced View → Extra Parameters:
 

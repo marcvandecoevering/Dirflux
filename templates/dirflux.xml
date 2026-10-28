@@ -17,7 +17,7 @@
   <Beta>true</Beta>
   <Overview>Dirflux is a self-hosted file manager with two panes, uploads, previews, editing and share links. Beta release. Set the initial administrator password during installation, then sign in as admin. Protect remote access with HTTPS.</Overview>
   <Requires>Use separate Files and Appdata folders. Empty mount roots are initialized automatically; existing files and permissions are preserved.</Requires>
-  <Config Name="Web interface" Target="8080" Default="8094" Mode="tcp" Description="HTTP port. Use an HTTPS proxy for remote access." Type="Port" Display="always" Required="true" Mask="false"/>
+  <Config Name="Web interface" Target="8080" Default="8080" Mode="tcp" Description="HTTP port. Use an HTTPS proxy for remote access." Type="Port" Display="always" Required="true" Mask="false"/>
   <Config Name="Files" Target="/files" Default="/mnt/user/dirflux" Mode="rw" Description="Only this folder is exposed through the file manager. Keep it outside Appdata." Type="Path" Display="always" Required="true" Mask="false"/>
   <Config Name="Appdata" Target="/config" Default="/mnt/user/appdata/dirflux" Mode="rw" Description="Private accounts, sessions, settings and trash. Never place inside Files." Type="Path" Display="always" Required="true" Mask="false"/>
   <Config Name="Initial administrator password" Target="INITIAL_ADMIN_PASSWORD" Default="" Mode="" Description="Choose 12–1024 characters. Used only when no account exists; never resets an existing password." Type="Variable" Display="always" Required="true" Mask="true"/>

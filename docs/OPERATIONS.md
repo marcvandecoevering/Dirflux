@@ -52,7 +52,7 @@ The `beta` tag receives verified releases. Pull the new image and recreate the c
 docker compose up -d --build
 ```
 
-The example creates separate file and configuration volumes and binds `127.0.0.1:8094`. The image initializes empty mount roots and drops to PUID/PGID 99:100 by default. An explicit non-root container user bypasses initialization; its mounted folders must already be writable. The Unraid template uses UID/GID 99:100. Bind-mounted directories must be writable by the configured container user. Do not recursively change ownership of existing user storage as part of container startup.
+The example creates separate file and configuration volumes and binds `127.0.0.1:8080`. The image initializes empty mount roots and drops to PUID/PGID 99:100 by default. An explicit non-root container user bypasses initialization; its mounted folders must already be writable. The Unraid template uses UID/GID 99:100. Bind-mounted directories must be writable by the configured container user. Do not recursively change ownership of existing user storage as part of container startup.
 
 Set `INITIAL_ADMIN_PASSWORD` (12–1024 characters) for direct initial login as `admin`. Without it, read `/config/setup-token` from the container console for protected administrator setup. Both `/config` and `/files` must be persistent. They must not be nested, including through symbolic links. `/config` must be writable even when `/files` is mounted read-only.
 
