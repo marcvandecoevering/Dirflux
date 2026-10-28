@@ -8,7 +8,7 @@ The implementation uses Node.js 24, Express, SQLite, CodeMirror 6 and PDF.js. Br
 
 [Functional comparison and release gates](docs/PARITY.md) records the reference behavior, available evidence and outstanding work. Existing droppy users, credentials, files, links and configuration do not need migration and are not imported. The new UI may differ visually while preserving the original capabilities.
 
-Current verification on Windows: 38 automated tests pass. Browser checks cover upload replace/keep-both flows and concurrent uploads with independent cancellation. The native release archive passes production-only installation, switching installation directories with persistent data, and restoring a consistent backup into separate storage. Both installations use the current build; cross-version migrations are not verified. GitHub CI is configured for Windows, Linux and macOS, plus a restricted Linux container test; these workflows have **not yet run on GitHub**. The local Docker engine is unavailable, so container support is not yet verified.
+Current verification on Windows: 40 automated tests pass. Browser checks cover upload replace/keep-both flows and concurrent uploads with independent cancellation. The native release archive passes production-only installation, switching installation directories with persistent data, and restoring a consistent backup into separate storage. Both installations use the current build; cross-version migrations are not verified. GitHub CI is configured for Windows, Linux and macOS, plus a restricted Linux container test; these workflows have **not yet run on GitHub**. The local Docker engine is unavailable, so container support is not yet verified.
 
 ## Run from source
 
@@ -93,12 +93,15 @@ Environment variables are read from the process. To use `.env`, copy `.env.examp
 | `MAX_TEXT_BYTES` | `2097152` | Maximum UTF-8 editor file size in bytes; configurable from 1 byte to 64 MiB |
 | `UPLOAD_TIMEOUT_MS` | `604800000` | Maximum time to receive an authenticated upload, 7 days by default; integer from 1 to 2147483647 ms |
 | `READ_ONLY` | `false` | Deny file changes and new public links |
+| `PUBLIC_MODE` | `false` | Allow visitors without accounts; they can edit shared files unless `READ_ONLY=true` |
 | `WATCH` | `true` | Enable native recursive filesystem notifications |
 | `IGNORE_PATTERNS` | `[]` | JSON array of root-relative glob patterns, for example `["**/*.tmp","**/.env","private"]` |
 | `POLLING_INTERVAL_MS` | `15000` | Periodically invalidate folder sizes and refresh connected clients; `0` disables this fallback |
 | `COOKIE_SECURE` | `false` | Require HTTPS for session cookies when `true` |
 
 For network mounts, periodic refresh works even when native filesystem notifications are unavailable. It refreshes on every interval rather than scanning the entire tree for changes; directory sizes are recalculated on demand. `WATCH=false` disables native notifications independently of periodic refresh. Disabling both means externally changed folder sizes can remain cached until an app mutation or restart.
+
+Public mode mirrors droppy's public file access: visitors receive a session automatically and can browse, upload, edit, move, delete and share files. Combine `PUBLIC_MODE=true` with `READ_ONLY=true` for read-only browsing. Visitors share one public identity for their links and trash; those items are visible to other visitors. Visitors cannot manage accounts or change passwords. Use **Sign in** or `/?login=1` for account login or initial administrator setup, which still requires the server-side setup code. Disabling public mode and restarting denies guest sessions access; independently created public share links keep their normal validity until revoked. Public mode is opt-in and is not enabled in the default deployment.
 
 Ignore patterns use [picomatch](https://github.com/micromatch/picomatch) glob syntax with `/` separators and include dotfiles. Matching is case-insensitive on Windows. Excluding a directory excludes its descendants. Rules apply to listings, search, sizes, previews, downloads, archives, public links and write destinations; restart after changing configuration. Existing links cannot bypass new exclusions. Moving, copying or trashing an entire directory containing excluded entries is rejected, rather than silently moving or deleting hidden content. Choose its visible entries individually. Patterns are exclusion predicates, not an ordered gitignore file with re-inclusion rules.
 
@@ -111,7 +114,7 @@ Folder drag-and-drop includes empty directories when the browser exposes directo
 ## Security boundaries and remaining limits
 
 - Passwords use salted scrypt. Session cookies are HttpOnly and SameSite=Strict; sessions expire after seven days. Mutations require a CSRF token and check browser Origin when present.
-- Initial account creation requires the server-side one-time installation code. Public/no-login browsing is not implemented yet.
+- Initial account creation requires the server-side one-time installation code, including when optional public/no-login browsing is enabled. Public sessions retain CSRF and Origin checks for mutations; they do not grant account administration.
 - Paths reject traversal, Windows alternate streams/device names and symbolic links/junctions. User HTML/SVG is not rendered as executable content under the app origin. Internal `.app-tmp-` paths cannot be accessed through file APIs.
 - Editor reads, save-version checks and public text previews enforce their byte limits during reading, including when files grow after the initial size check. Oversized public previews fall back to streamed downloads.
 - Same-filesystem moves use atomic rename and a SQLite intent journal. An ambiguous interrupted move prevents startup rather than guessing a link destination. Preserve both storage directories and investigate the recorded operation before recovery; do not discard the journal. Cross-filesystem moves are not implemented yet.

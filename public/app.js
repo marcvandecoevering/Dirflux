@@ -33,11 +33,11 @@ window.addEventListener('storage',event=>{if(event.key==='droppy-next-prefs'){pr
 const originalIcon = name => `<svg class="original-icon" aria-hidden="true"><use href="/original/icons.svg#o-${name}"/></svg>`;
 const tool = (action,icon,label,extra='') => `<button class="classic-button ${extra}" data-tool="${action}" aria-label="${label}" title="${label}">${originalIcon(icon)}</button>`;
 function paneNav() {
-  return `<div class="classic-nav"><div class="classic-nav-group">${tool('upload','add-file','Upload files from disk','write')}${tool('upload-folder','add-folder','Upload folder from disk','write')}${tool('create','create-file','Create file','write')}${tool('mkdir','create-folder','Create folder','write')}</div><div class="classic-nav-group"><form class="classic-search">${tool('search','find','Search')}<input type="search" placeholder="Term" aria-label="Search term"></form>${tool('refresh','reload','Reload View')}${tool('split','window','Create new View')}${tool('preferences','cog','Preferences')}${tool('about','info','About','nav-about')}${tool('logout','signout','Sign out','nav-logout')}</div></div>`;
+  return `<div class="classic-nav"><div class="classic-nav-group">${tool('upload','add-file','Upload files from disk','write')}${tool('upload-folder','add-folder','Upload folder from disk','write')}${tool('create','create-file','Create file','write')}${tool('mkdir','create-folder','Create folder','write')}</div><div class="classic-nav-group"><form class="classic-search">${tool('search','find','Search')}<input type="search" placeholder="Term" aria-label="Search term"></form>${tool('refresh','reload','Reload View')}${tool('split','window','Create new View')}${tool('preferences','cog','Preferences')}${tool('about','info','About','nav-about')}${tool('logout','signout',state.user?.guest?'Sign in':'Sign out','nav-logout')}</div></div>`;
 }
 async function showPrefs() {
   const {themeNames}=await import('/vendor/extras.js');
-  showDialog('Preferences', `<form class="dialog-form" id="prefs-form"><label>Editor theme<select name="theme"><option value="droppy">droppy</option><option value="dark">one dark</option><option value="light">light</option></select></label><label>Editor font size<select name="editorFontSize">${Array.from({length:11},(_,i)=>`<option>${10+i*2}</option>`).join('')}</select></label><label>Editor indent type<select name="indentWithTabs"><option value="false">Spaces</option><option value="true">Tabs</option></select></label><label>Editor indent width<select name="indentUnit">${[1,2,4,8].map(n=>`<option>${n}</option>`).join('')}</select></label><label>Editor word wrap<select name="lineWrapping"><option value="false">No wrap</option><option value="true">Wrap</option></select></label><label>Sharelink download<select name="sharelinkDownload"><option value="true">Default on</option><option value="false">Default off</option></select></label><div class="prefs-buttons"><button type="button" class="secondary" data-prefs="shares">Shared links</button><button type="button" class="secondary" data-prefs="trash">Trash</button><button type="button" class="secondary" data-prefs="account">Account</button>${state.user.role==='admin'?'<button type="button" class="secondary" data-prefs="users">Users</button>':''}</div><div class="dialog-actions"><button class="primary" type="submit">Save</button></div></form>`);
+  showDialog('Preferences', `<form class="dialog-form" id="prefs-form"><label>Editor theme<select name="theme"><option value="droppy">droppy</option><option value="dark">one dark</option><option value="light">light</option></select></label><label>Editor font size<select name="editorFontSize">${Array.from({length:11},(_,i)=>`<option>${10+i*2}</option>`).join('')}</select></label><label>Editor indent type<select name="indentWithTabs"><option value="false">Spaces</option><option value="true">Tabs</option></select></label><label>Editor indent width<select name="indentUnit">${[1,2,4,8].map(n=>`<option>${n}</option>`).join('')}</select></label><label>Editor word wrap<select name="lineWrapping"><option value="false">No wrap</option><option value="true">Wrap</option></select></label><label>Sharelink download<select name="sharelinkDownload"><option value="true">Default on</option><option value="false">Default off</option></select></label><div class="prefs-buttons"><button type="button" class="secondary" data-prefs="shares">Shared links</button><button type="button" class="secondary" data-prefs="trash">Trash</button>${state.user.guest?'<a class="secondary" href="/?login=1">Sign in</a>':'<button type="button" class="secondary" data-prefs="account">Account</button>'}${state.user.role==='admin'?'<button type="button" class="secondary" data-prefs="users">Users</button>':''}</div><div class="dialog-actions"><button class="primary" type="submit">Save</button></div></form>`);
   $('#prefs-form [name=theme]').innerHTML=themeNames.map(name=>`<option>${escape(name)}</option>`).join('');
   for(const [key,value] of Object.entries(prefs)) { const input=$(`#prefs-form [name="${key}"]`); if(input)input.value=String(value); }
   on($('#prefs-form'),'submit',e=>{e.preventDefault();const data=Object.fromEntries(new FormData(e.currentTarget)); for(const [key,value] of Object.entries(data)) prefs[key]=['true','false'].includes(value)?value==='true':/^\d+$/.test(value)?Number(value):value;localStorage.setItem('droppy-next-prefs',JSON.stringify(prefs));closeDialog();toast('Preferences saved.');});
@@ -459,7 +459,7 @@ async function upload(files, destination) {
   toast(`${completed} van ${files.length} bestand(en)/map(pen) verwerkt.${job.cancelled ? ' Upload geannuleerd.' : ''}`, errors.length > 0);
 }
 async function init() {
-  const session = await api('/session'); Object.assign(state, session);
+  const session = await api('/session'+(viewParameters.get('login')==='1'?'?login=1':'')); Object.assign(state, session);
   $('#auth').hidden = !!state.user; $('#shell').hidden = !state.user;
   document.body.classList.toggle('read-only', !!state.user && !canWrite());
   if (!state.user) {
@@ -481,6 +481,7 @@ async function init() {
     return;
   }
   $('#account-name').textContent = state.user.name; $('#avatar').textContent = state.user.name[0].toUpperCase();
+  $('#account-settings').hidden=!!state.user.guest;
   $('#account-role').textContent = { admin:'Beheerder', editor:'Bewerken', viewer:'Alleen lezen' }[state.user.role];
   $('#nav-users').hidden = state.user.role !== 'admin';
   if(!viewerMode&&location.hash)await restoreLocation();
@@ -495,7 +496,7 @@ on($('#login-form'), 'submit', async e => {
   catch (error) { $('#auth-error').textContent = error.message; }
   finally { $('#login-button').disabled = false; }
 });
-on($('#logout'), 'click', async () => { if($$('.file-view').some(f=>f.contentWindow.confirmCloseView?.()===false))return; await api('/logout', { method:'POST' }); state.user = null; state.panes = [{ path:'', items:[], selected:new Set(), sort:'name' }]; state.active = 0; await init(); });
+on($('#logout'), 'click', async () => { if($$('.file-view').some(f=>f.contentWindow.confirmCloseView?.()===false))return; const wasGuest=state.user?.guest; await api('/logout', { method:'POST' }); if(wasGuest){location.href='/?login=1';return;} state.user = null; state.panes = [{ path:'', items:[], selected:new Set(), sort:'name' }]; state.active = 0; await init(); });
 on($('#refresh'), 'click', () => refreshAll());
 on($('#new-folder'), 'click', () => create(true)); on($('#new-file'), 'click', () => create(false));
 $('#upload-button').onclick = () => $('#file-input').click(); $('#upload-folder').onclick = () => $('#folder-input').click();

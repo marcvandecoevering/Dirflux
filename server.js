@@ -23,6 +23,14 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 const day = 86400000;
 
 export async function createApp(options = {}) {
+  function booleanSetting(value,name) {
+    if(![true,false,'true','false'].includes(value))throw new Error(`${name} must be true or false.`);
+    return value===true||value==='true';
+  }
+  const publicMode=booleanSetting(options.publicMode ?? process.env.PUBLIC_MODE ?? false,'PUBLIC_MODE');
+  const readOnly=booleanSetting(options.readOnly ?? process.env.READ_ONLY ?? false,'READ_ONLY');
+  const secure=booleanSetting(process.env.COOKIE_SECURE ?? false,'COOKIE_SECURE');
+  const guestUser={id:'public',name:'Bezoeker',role:'editor',guest:true};
   function byteLimit(value, name, minimum, maximum = Number.MAX_SAFE_INTEGER) {
     if (!['number','string'].includes(typeof value) || String(value).trim() === '') throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
     const result=Number(value);
@@ -91,10 +99,8 @@ export async function createApp(options = {}) {
   const pollTimer = pollingInterval ? setInterval(() => {sizeCache.clear();emitChange();}, pollingInterval) : undefined;
   pollTimer?.unref();
   app.disable('x-powered-by');
-  const readOnly = options.readOnly ?? process.env.READ_ONLY === 'true';
-  const secure = process.env.COOKIE_SECURE === 'true';
   const attempts = new Map();
-  const publicUser = u => ({ id: u.id, name: u.name, role: u.role });
+  const publicUser = u => ({ id: u.id, name: u.name, role: u.role, ...(u.guest?{guest:true}:{}) });
   const countUsers = () => db.prepare('SELECT count(*) AS n FROM users').get().n;
   const setupTokenPath = path.join(config,'setup-token');
   let setupToken;
@@ -191,6 +197,10 @@ export async function createApp(options = {}) {
     if (cookie) {
       const row = db.prepare('SELECT sessions.id AS session_id, sessions.csrf, users.* FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.id=? AND sessions.expires>?').get(hash(cookie), Date.now());
       if (row) req.auth = row;
+      else if(publicMode) {
+        const guest=db.prepare("SELECT id AS session_id,csrf FROM sessions WHERE id=? AND user_id='public' AND expires>?").get(hash(cookie),Date.now());
+        if(guest)req.auth={...guestUser,...guest};
+      }
     }
     next();
   });
@@ -207,7 +217,11 @@ export async function createApp(options = {}) {
     return jsonBody(req,res,next);
   });
   app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'droppy-next', version: '0.1.0' }));
-  app.get('/api/session', (req, res) => res.json({ setup: countUsers() === 0, setupTokenRequired: countUsers() === 0, user: req.auth ? publicUser(req.auth) : null, csrf: req.auth?.csrf, readOnly }));
+  app.get('/api/session', (req, res) => {
+    if(publicMode&&!req.auth&&req.query.login!=='1')return res.json({...session(res,guestUser),setup:false,setupTokenRequired:false,publicMode});
+    const auth=req.query.login==='1'&&req.auth?.guest?null:req.auth;
+    res.json({ setup: !auth&&countUsers() === 0, setupTokenRequired: !auth&&countUsers() === 0, user: auth ? publicUser(auth) : null, csrf:auth?.csrf, readOnly,publicMode });
+  });
   const throttle = (req, _res, next) => {
     const key = req.socket.remoteAddress;
     if (attempts.size > 1000) for (const [k, v] of attempts) if (v.until < Date.now()) attempts.delete(k);
@@ -311,6 +325,7 @@ export async function createApp(options = {}) {
     res.clearCookie('droppy_session', { path: '/' }); res.json({ ok: true });
   });
   write.post('/api/password', throttle, async (req, res) => {
+    if(req.auth.guest)throw fail(403,'Een openbare bezoeker heeft geen accountwachtwoord.');
     const { currentPassword, password } = req.body || {};
     if (typeof currentPassword !== 'string' || currentPassword.length > 1024 || typeof password !== 'string' || password.length < 12 || password.length > 1024) throw fail(400, 'Gebruik een nieuw wachtwoord van 12–1024 tekens.');
     const current = await scrypt(currentPassword, req.auth.salt, 64);
