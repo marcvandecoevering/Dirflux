@@ -1,5 +1,6 @@
 import { bindImageViewer } from './image-viewer.js';
 import { fileShortcut } from './file-shortcuts.js';
+import { canEditSession } from './session-permissions.js';
 import { dropOperation, readInternalDrop, dropTransfer } from './internal-drop.js';
 import { isAudio, isVideo, nextTrack, audioFailureRecovery, bindVideoPlayback } from './media-playback.js';
 const $ = selector => document.querySelector(selector);
@@ -17,7 +18,7 @@ const join = (...parts) => parts.filter(Boolean).join('/');
 const parent = value => value.split('/').slice(0, -1).join('/');
 const basename = value => value.split('/').at(-1);
 const active = () => state.panes[state.active];
-const canWrite = () => !state.readOnly && state.user?.role !== 'viewer';
+const canWrite = () => canEditSession(state);
 const size = n => n < 1024 ? n + ' B' : n < 1024 ** 2 ? (n / 1024).toFixed(1) + ' KB' : n < 1024 ** 3 ? (n / 1024 ** 2).toFixed(1) + ' MB' : (n / 1024 ** 3).toFixed(1) + ' GB';
 const date = n => new Intl.DateTimeFormat('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' }).format(n);
 const kind = item => item.directory ? 'folder' : /\.(png|jpe?g|gif|webp|avif|bmp)$/i.test(item.name) ? 'image' : /\.(mp4|webm|ogv|mp3|wav|ogg|m4a|flac)$/i.test(item.name) ? 'media' : 'file';
@@ -69,7 +70,11 @@ async function api(url, options = {}) {
       const renewed=await fetch('/api/session').then(r=>r.json());
       if(renewed.csrf&&renewed.csrf!==state.csrf){state.csrf=renewed.csrf;return api(url,{...options,headers,retried:true});}
     }
-    if (response.status === 401 && state.user) { state.user = null; await init(); }
+    if (response.status === 401 && state.user) {
+      const owner=state.user.id;state.user=null;state.csrf=null;
+      if(editorInstance&&state.dirty)pauseEditorSession(owner);
+      else await init();
+    }
     throw new Error(body.error || 'Verzoek mislukt.');
   }
   return body;
@@ -105,6 +110,27 @@ function confirmDiscardChanges() {
   document.body.append(dialog);
   dialog.showModal();
   return discardPrompt;
+}
+function pauseEditorSession(owner) {
+  const editor=editorInstance,status=$('#editor-status'),save=$('#save');
+  document.body.classList.add('read-only');save.disabled=true;
+  status.replaceChildren(document.createTextNode('Sessie verlopen. Je concept blijft hier behouden. '));
+  const login=document.createElement('a');login.href='/?login=1';login.target='_blank';login.rel='noopener';login.textContent='Opnieuw aanmelden';
+  const resume=document.createElement('button');resume.type='button';resume.textContent='Sessie controleren';
+  status.append(login,document.createTextNode(' '),resume);
+  on(resume,'click',async()=>{
+    resume.disabled=true;
+    try {
+      const response=await fetch('/api/session?login=1',{cache:'no-store'});
+      if(!response.ok)throw new Error('De sessie kon niet worden gecontroleerd.');
+      const session=await response.json();
+      if(editorInstance!==editor||!status.isConnected)return;
+      if(!canEditSession(session,owner))throw new Error('Meld je aan met hetzelfde account met bewerkrechten. Je concept blijft behouden.');
+      Object.assign(state,session);document.body.classList.remove('read-only');
+      save.disabled=false;status.textContent='Unsaved changes';
+      toast('Sessie hersteld. Je kunt het concept nu opslaan.');
+    } finally {if(resume.isConnected)resume.disabled=false;}
+  });
 }
 window.confirmCloseView = confirmDiscardChanges;
 let viewTransitionBusy = false;
@@ -547,9 +573,9 @@ async function openFile(item, index, forceText=false) {
     if(!canWrite()||!editorInstance)return;
     $('#save').disabled=true;
     try{const text=editorInstance.getText();const result=await api('/text',{method:'POST',body:{path:item.path,text,version}});version=result.version;state.dirty=editorInstance.getText()!==text;$('#editor-status').textContent=state.dirty?'Unsaved changes':'Saved · '+new Date().toLocaleTimeString('nl-NL');await refreshAll();}
-    finally{if($('#save'))$('#save').disabled=false;}
+    finally{if($('#save'))$('#save').disabled=!canWrite();}
   };
-  editorInstance=await extras.editor($('#editor-host'),data.text,item.name,prefs,!canWrite(),()=>{state.dirty=true;$('#editor-status').textContent='Unsaved changes';},()=>save().catch(e=>toast(e.message,true)));
+  editorInstance=await extras.editor($('#editor-host'),data.text,item.name,prefs,!canWrite(),()=>{state.dirty=true;if(state.user)$('#editor-status').textContent='Unsaved changes';},()=>save().catch(e=>toast(e.message,true)));
   $('#syntax').innerHTML=['Plain text',...extras.modes].map(mode=>`<option>${escape(mode)}</option>`).join('');$('#syntax').value=editorInstance.modeName;
   on($('#syntax'),'change',e=>editorInstance.mode(e.target.value));on($('#save'),'click',save);
   $('#editor-find').onclick=()=>editorInstance.find();$('#editor-download').onclick=()=>download(item);
@@ -679,7 +705,7 @@ async function upload(files, destination) {
 async function init() {
   const session = await api('/session'+(viewParameters.get('login')==='1'?'?login=1':'')); Object.assign(state, session);
   $('#auth').hidden = !!state.user; $('#shell').hidden = !state.user;
-  document.body.classList.toggle('read-only', !!state.user && !canWrite());
+  document.body.classList.toggle('read-only', !canWrite());
   if (!state.user) {
     stopAudio(); clipboard=null;
     for(const job of uploadJobs)job.cancel();
