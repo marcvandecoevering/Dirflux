@@ -395,20 +395,19 @@ export async function createApp(options = {}) {
     const truncated=items.length>1000;
     res.json({items:items.slice(0,1000),truncated,nextOffset:truncated?offset+1000:null});
   });
-  app.get('/api/file', async (req, res) => {
+  async function authenticatedFile(req,res,pdfOnly=false) {
     const { absolute } = await resolve(req.query.path);
-    if (!(await fsp.stat(absolute)).isFile()) throw fail(400, 'Dit is geen bestand.');
-    if (req.query.download === '1') return res.download(absolute, {dotfiles:'allow'});
-    // Never render user-controlled HTML/SVG/scripts under the application origin.
     const ext = path.extname(absolute).toLowerCase();
-    if (!['.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac'].includes(ext)) return res.download(absolute, {dotfiles:'allow'});
-    res.sendFile(absolute, {dotfiles:'allow'});
-  });
-  app.get('/api/pdf', async (req, res) => {
-    const { absolute } = await resolve(req.query.path);
-    if (path.extname(absolute).toLowerCase() !== '.pdf') throw fail(415, 'Dit is geen PDF-bestand.');
-    res.type('application/pdf').set('Content-Disposition', 'attachment').sendFile(absolute, {dotfiles:'allow'});
-  });
+    if(pdfOnly&&ext!=='.pdf')throw fail(415,'Dit is geen PDF-bestand.');
+    // Pin the opened file for the entire response, including HEAD/range handling.
+    // Never render user-controlled HTML/SVG/scripts under the application origin.
+    const inline=!pdfOnly&&req.query.download!=='1'&&['.png','.jpg','.jpeg','.gif','.webp','.avif','.bmp','.mp4','.webm','.ogv','.mp3','.wav','.ogg','.m4a','.flac'].includes(ext);
+    const handle=await fsp.open(absolute,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));
+    try {await sendOpenedFile(req,res,handle,path.basename(absolute),inline);}
+    finally {await handle.close();}
+  }
+  app.get('/api/file', (req,res)=>authenticatedFile(req,res));
+  app.get('/api/pdf', (req,res)=>authenticatedFile(req,res,true));
   async function zip(relative, res, guard = () => {}) {
     await resolve(relative);
     if(res.destroyed)return;
