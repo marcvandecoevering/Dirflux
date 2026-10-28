@@ -1,3 +1,4 @@
+import { isAudio, isVideo, nextTrack, bindVideoPlayback } from './media-playback.js';
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const viewParameters = new URLSearchParams(location.search);
@@ -17,6 +18,7 @@ const kind = item => item.directory ? 'folder' : /\.(png|jpe?g|gif|webp|avif|bmp
 let toastTimer, closeHook = null, refreshBusy = false;
 const uploadJobs = new Set();
 let uploadConflictQueue = Promise.resolve();
+let videoPlayback = null;
 let editorInstance = null, currentMedia = null, clipboard = null, audioItems = [], audioIndex = 0, eventSource = null;
 const defaultPrefs = { theme:'droppy',editorFontSize:16,indentWithTabs:false,indentUnit:4,lineWrapping:false,loop:true,autonext:false,sharelinkDownload:true };
 let prefs;
@@ -29,7 +31,7 @@ function readPreferences() {
   return settings;
 }
 prefs=readPreferences();
-window.addEventListener('storage',event=>{if(event.key==='droppy-next-prefs'){prefs=readPreferences();editorInstance?.setPreferences(prefs);}});
+window.addEventListener('storage',event=>{if(event.key==='droppy-next-prefs'){prefs=readPreferences();editorInstance?.setPreferences(prefs);syncVideoControls();}});
 const originalIcon = name => `<svg class="original-icon" aria-hidden="true"><use href="/original/icons.svg#o-${name}"/></svg>`;
 const tool = (action,icon,label,extra='') => `<button class="classic-button ${extra}" data-tool="${action}" aria-label="${label}" title="${label}">${originalIcon(icon)}</button>`;
 function paneNav() {
@@ -69,12 +71,14 @@ function on(element, event, action) {
 }
 function closeDialog() {
   if (closeHook && !closeHook()) return;
+  videoPlayback?.destroy(); videoPlayback=null;
   editorInstance?.destroy(); editorInstance=null; currentMedia=null;
   $('#dialog').close(); $('#dialog-content').replaceChildren(); state.dirty = false; closeHook = null;
   if(viewerMode)window.parent.postMessage({type:'droppy-close'},location.origin);
 }
 window.confirmCloseView = () => !state.dirty || confirm('Wijzigingen zijn nog niet opgeslagen. Toch sluiten?');
 function showDialog(title, html, className = '') {
+  videoPlayback?.destroy(); videoPlayback=null;
   editorInstance?.destroy(); editorInstance=null; currentMedia=null;
   $('#dialog-title').textContent = title; $('#dialog-content').innerHTML = html; $('#dialog').className = className;
   state.dirty = false; closeHook = null;
@@ -289,16 +293,15 @@ async function openPdf(item) {
   on($('#pdf-prev'),'click',viewer.previous);on($('#pdf-next'),'click',viewer.next);on($('#pdf-in'),'click',()=>viewer.zoom(1.2));on($('#pdf-out'),'click',()=>viewer.zoom(1/1.2));$('#pdf-download').onclick=()=>download(item);
 }
 function playAudio(item,index) {
-  audioItems=state.panes[index].items.filter(i=>/\.(mp3|wav|ogg|m4a|flac)$/i.test(i.name));audioIndex=audioItems.findIndex(i=>i.path===item.path);
+  audioItems=state.panes[index].items.filter(isAudio);audioIndex=audioItems.findIndex(i=>i.path===item.path);
   let bar=$('#audio-bar');
-  if(!bar){bar=document.createElement('div');bar.id='audio-bar';bar.className='audio-bar';bar.innerHTML='<button id="audio-prev" aria-label="Previous track">◀</button><button id="audio-next" aria-label="Next track">▶</button><button id="audio-shuffle" aria-label="Shuffle">⤨</button><button id="audio-loop" aria-label="Loop">↻</button><span id="audio-title"></span><audio id="audio-player" controls></audio><button id="audio-stop" aria-label="Stop">×</button>';document.body.append(bar);}
+  if(!bar){bar=document.createElement('div');bar.id='audio-bar';bar.className='audio-bar';bar.innerHTML='<button id="audio-prev" aria-label="Previous track">◀</button><button id="audio-next" aria-label="Next track">▶</button><button id="audio-shuffle" aria-label="Shuffle">⤨</button><span id="audio-title"></span><audio id="audio-player" controls></audio><button id="audio-stop" aria-label="Stop">×</button>';document.body.append(bar);}
   $('#shell').classList.add('has-audio');
   const player=$('#audio-player');
   function start(){const track=audioItems[audioIndex];$('#audio-title').textContent=track.name;player.src='/api/file?path='+encodeURIComponent(track.path);player.play().catch(()=>toast('Click play to start audio.'));}
-  function next(delta){audioIndex=$('#audio-shuffle').classList.contains('toggle-active')?Math.floor(Math.random()*audioItems.length):(audioIndex+delta+audioItems.length)%audioItems.length;start();}
+  function next(delta){audioIndex=nextTrack(audioIndex,audioItems.length,delta,$('#audio-shuffle').classList.contains('toggle-active'));start();}
   $('#audio-prev').onclick=()=>next(-1);$('#audio-next').onclick=()=>next(1);$('#audio-shuffle').onclick=e=>e.currentTarget.classList.toggle('toggle-active');
-  $('#audio-loop').classList.toggle('toggle-active',prefs.loop);$('#audio-loop').onclick=e=>{prefs.loop=!prefs.loop;e.currentTarget.classList.toggle('toggle-active',prefs.loop);localStorage.setItem('droppy-next-prefs',JSON.stringify(prefs));};
-  player.onended=()=>{if(audioIndex<audioItems.length-1||prefs.loop)next(1);};
+  player.onended=()=>next(1);
   $('#audio-stop').onclick=()=>{player.pause();bar.remove();$('#shell').classList.remove('has-audio');};start();
 }
 async function trashItems(items) {
@@ -314,6 +317,12 @@ async function create(directory) {
     await api('/create', { method:'POST', body:{ path:join(destination,name), directory } }); toast(directory ? 'Map aangemaakt.' : 'Bestand aangemaakt.');
   });
 }
+function syncVideoControls() {
+  for(const setting of ['loop','autonext']) {
+    const button=$('#video-'+setting);
+    if(button){button.setAttribute('aria-pressed',String(prefs[setting]));button.classList.toggle('toggle-active',prefs[setting]);}
+  }
+}
 async function openFile(item, index, forceText=false) {
   if(!viewerMode && !/\.(mp3|wav|ogg|m4a|flac)$/i.test(item.name)) {
     const pane=state.panes[index];pane.open={item,forceText};renderPane(index);recordLocation();return;
@@ -324,12 +333,26 @@ async function openFile(item, index, forceText=false) {
   if (!forceText && ['image','media'].includes(kind(item))) {
     const type = kind(item) === 'image' ? 'image' : /\.(mp3|wav|ogg|m4a|flac)$/i.test(item.name) ? 'audio' : 'video';
     showDialog(item.name, `${type === 'image' ? `<img class="preview-image" src="${url}" alt="${escape(item.name)}">` : `<${type} class="preview-${type}" src="${url}" controls></${type}>`}<div class="preview-controls"><button class="secondary" id="preview-prev">← Vorige</button><button class="secondary" id="preview-download">Download</button><button class="secondary" id="preview-zoom">Zoom</button><button class="secondary" id="fullscreen">Vergroten</button><button class="secondary" id="preview-next">Volgende →</button></div>`, 'preview-dialog');
-    const peers = state.panes[index].items.filter(i => kind(i) === kind(item)); const at = peers.findIndex(i => i.path === item.path);
+    const peers = state.panes[index].items.filter(i => type === 'video' ? isVideo(i) : kind(i) === 'image'); const at = peers.findIndex(i => i.path === item.path);
     $('#preview-prev').disabled = at <= 0; $('#preview-next').disabled = at >= peers.length - 1;
     on($('#preview-prev'), 'click', () => openFile(peers[at-1], index)); on($('#preview-next'), 'click', () => openFile(peers[at+1], index)); $('#preview-download').onclick = () => download(item);
     $('#fullscreen').onclick = () => (viewerMode?window.parent.postMessage({type:'droppy-fullscreen'},location.origin):$('#dialog').classList.toggle('fullscreen-dialog'));
     currentMedia={previous:()=>{if(at>0)openFile(peers[at-1],index);},next:()=>{if(at<peers.length-1)openFile(peers[at+1],index);}};
     $('#preview-zoom').onclick=()=>{const media=$('.preview-image')||$('.preview-video');media.classList.toggle('zoomed');};
+    if(type==='video') {
+      const controls=$('.preview-controls');
+      for(const [setting,label] of [['loop','Video herhalen'],['autonext','Automatisch volgende video']]) {
+        const button=document.createElement('button');button.className='secondary';button.id='video-'+setting;button.textContent=label;
+        button.onclick=()=>{prefs[setting]=!prefs[setting];localStorage.setItem('droppy-next-prefs',JSON.stringify(prefs));syncVideoControls();};controls.append(button);
+      }
+      syncVideoControls();
+      videoPlayback=bindVideoPlayback($('.preview-video'),{
+        preferences:()=>prefs,next:()=>currentMedia?.next(),
+        error:()=>toast('Je browser kan deze video niet afspelen.',true),
+        playRejected:()=>toast('Druk op afspelen om de video te starten.'),
+      });
+      if(!matchMedia('(pointer: coarse)').matches)videoPlayback.play();
+    }
     const surface=$('.preview-image')||$('.preview-video');let touchStart;
     surface.addEventListener('touchstart',e=>touchStart=e.touches[0].clientX,{passive:true});surface.addEventListener('touchend',e=>{const delta=e.changedTouches[0].clientX-touchStart;if(Math.abs(delta)>60)(delta<0?currentMedia.next:currentMedia.previous)();},{passive:true});
     return;
