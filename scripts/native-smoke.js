@@ -18,7 +18,7 @@ async function stop() {
 }
 async function start(app,storage=temporary) {
   let output='',errors='';
-  child=spawn(process.execPath,['server.js'],{cwd:app,env:{...process.env,HOST:'127.0.0.1',PORT:'0',FILES_DIR:path.join(storage,'files'),CONFIG_DIR:path.join(storage,'config'),IGNORE_PATTERNS:'[]',READ_ONLY:'false'},stdio:['ignore','pipe','pipe']});
+  child=spawn(process.execPath,['server.js'],{cwd:app,env:{...process.env,HOST:'127.0.0.1',PORT:'0',FILES_DIR:path.join(storage,'files'),CONFIG_DIR:path.join(storage,'config'),IGNORE_PATTERNS:'[]',READ_ONLY:'false',PUBLIC_MODE:'false',COOKIE_SECURE:'false',TLS_CERT_FILE:'',TLS_KEY_FILE:'',WATCH:'false',POLLING_INTERVAL_MS:'0'},stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>errors+=chunk);
   for(let n=0;n<80;n++){
     const base=output.match(/http:\/\/127\.0\.0\.1:(\d+)/)?.[0];
@@ -43,8 +43,14 @@ try {
   execFileSync(process.execPath,['scripts/ensure-assets.js'],{cwd:app,timeout:30000});
   let base=await start(app);
   assert.equal((await fetch(base+'/api/health')).status,200);
-  assert.equal((await fetch(base+'/vendor/extras.js')).status,200);
-  assert.equal((await fetch(base+'/vendor/pdf.worker.min.mjs')).status,200);
+  const html=await fetch(base+'/').then(response=>response.text());
+  assert.match(html,/<script\b[^>]*src="\/app\.js"[^>]*type="module"/);
+  for(const module of ['app.js','media-playback.js','image-viewer.js','upload-entries.js','vendor/extras.js','vendor/pdf.worker.min.mjs']) {
+    const response=await fetch(base+'/'+module);
+    assert.equal(response.status,200,`Missing browser module: ${module}`);
+    assert.match(response.headers.get('content-type'),/(?:javascript|ecmascript)/,`Incorrect module MIME: ${module}`);
+    assert.equal(await response.text(),await fs.readFile(path.join(app,'public',module),'utf8'),`Served module differs from package: ${module}`);
+  }
   assert.equal((await fetch(base+'/api/session').then(r=>r.json())).setup,true);
   const setupToken=(await fs.readFile(path.join(temporary,'config/setup-token'),'utf8')).trim();
   const setup=await fetch(base+'/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'release-test',password:'native-package-test-password',setupToken})});
