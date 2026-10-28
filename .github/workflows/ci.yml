@@ -49,4 +49,11 @@ jobs:
           node-version: '24'
       - run: docker compose config --quiet
       - run: docker build --pull -t local/file-app-ci .
+      - name: Test the built image with production dependencies
+        run: >-
+          docker run --rm --read-only --cap-drop=ALL --security-opt no-new-privileges
+          --tmpfs /tmp:rw,noexec,nosuid,size=512m
+          --mount "type=bind,src=${{ github.workspace }}/test,dst=/app/test,readonly"
+          --mount "type=bind,src=${{ github.workspace }}/scripts,dst=/app/scripts,readonly"
+          --entrypoint node local/file-app-ci --test
       - run: node scripts/container-smoke.js local/file-app-ci
