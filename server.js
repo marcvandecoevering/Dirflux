@@ -65,7 +65,7 @@ export async function createApp(options = {}) {
     if(endpoint.certFile)await loadTls(endpoint.certFile,endpoint.keyFile);
     else if(endpoint.protocol==='https'&&!tlsOptions)throw new Error('HTTPS listener requires certFile/keyFile or global TLS_CERT_FILE/TLS_KEY_FILE.');
   }
-  const guestUser={id:'public',name:'Bezoeker',role:'editor',guest:true};
+  const guestUser={id:'public',name:'Visitor',role:'editor',guest:true};
   function byteLimit(value, name, minimum, maximum = Number.MAX_SAFE_INTEGER) {
     if (!['number','string'].includes(typeof value) || String(value).trim() === '') throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
     const result=Number(value);
@@ -294,7 +294,7 @@ export async function createApp(options = {}) {
     }
     return jsonBody(req,res,next);
   });
-  app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'dirflux', version: '0.1.0-beta.8' }));
+  app.get('/api/health', (_req, res) => res.json({ ok: true, app: 'dirflux', version: '0.1.0-beta.9' }));
   app.get('/api/session', (req, res) => {
     if(publicMode&&!req.auth&&req.query.login!=='1')return res.json({...session(res,guestUser),setup:false,setupTokenRequired:false,publicMode});
     const auth=req.query.login==='1'&&req.auth?.guest?null:req.auth;

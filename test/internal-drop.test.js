@@ -25,7 +25,7 @@ test('same-folder move is a no-op while copy still requests collision renaming',
 
 test('malformed internal drops fail before any transfer request', () => {
   for (const raw of ['invalid','null','[]', ...['','/etc/passwd','../secret','a/../b','a//b','a\\b','a\0b'].map(path=>JSON.stringify({path,directory:false})), JSON.stringify({path:'a',directory:'false'}), JSON.stringify({path:'a',directory:true,operation:'delete'})]) {
-    assert.throws(()=>readInternalDrop(raw), /Ongeldige sleepgegevens/);
+    assert.throws(()=>readInternalDrop(raw), /Invalid drag data/);
   }
   assert.equal(readInternalDrop('{"path":"Map","directory":true}').directory, true);
 });

@@ -71,7 +71,7 @@ async function api(url, options = {}) {
   const response = await fetch('/api' + url, { ...options, headers });
   const body = await response.json();
   if (!response.ok) {
-    if(response.status===403 && body.error?.includes('Ongeldig sessietoken') && !options.retried){
+    if(response.status===403 && body.error?.includes('Invalid session token') && !options.retried){
       const renewed=await fetch('/api/session').then(r=>r.json());
       if(renewed.csrf&&renewed.csrf!==state.csrf){state.csrf=renewed.csrf;return api(url,{...options,headers,retried:true});}
     }
@@ -378,7 +378,7 @@ function renderPane(index) {
       case 'preferences':await showPrefs();break;
       case 'logout':$('#logout').click();break;
       case 'search':el.querySelector('.classic-search').classList.toggle('expanded');el.querySelector('.classic-search input').focus();break;
-      case 'about':showDialog('Dirflux', '<p>Independently rebuilt version · Dirflux 0.1.0-beta.8</p><p>Original design and icons: <a href="https://github.com/silverwind/droppy" target="_blank" rel="noopener">silverwind/droppy</a>.</p><p>Node.js · SQLite · CodeMirror 6</p>');break;
+      case 'about':showDialog('Dirflux', '<p>Independently rebuilt version · Dirflux 0.1.0-beta.9</p><p>Original design and icons: <a href="https://github.com/silverwind/droppy" target="_blank" rel="noopener">silverwind/droppy</a>.</p><p>Node.js · SQLite · CodeMirror 6</p>');break;
     }
   }));
   if(pane.query){el.querySelector('.classic-search').classList.add('expanded');el.querySelector('.classic-search input').value=pane.query;}
@@ -566,11 +566,11 @@ async function openFile(item, index, forceText=false) {
     if(type==='image') {
       $('#preview-zoom').remove();
       const controls=$('.preview-controls');
-      for(const [id,label] of [['in','Inzoomen'],['out','Uitzoomen'],['fit','Passend'],['width','Breedte'],['height','Hoogte']]) {
+      for(const [id,label] of [['in','Zoom in'],['out','Zoom out'],['fit','Fit'],['width','Width'],['height','Height']]) {
         const button=document.createElement('button');button.className='secondary';button.id='image-'+id;button.textContent=label;
         button.onclick=()=>{if(id==='in'||id==='out')imageViewer.zoom(id==='in'?1.5:1/1.5);else imageViewer.select(id);};controls.append(button);
       }
-      const status=document.createElement('output');status.id='image-scale';status.setAttribute('aria-label','Zoomniveau');controls.append(status);
+      const status=document.createElement('output');status.id='image-scale';status.setAttribute('aria-label','Zoom level');controls.append(status);
       imageViewer=bindImageViewer($('.preview-image'),$('.image-viewport'),{
         initialMode:imageFitMode,
         change:({scale,mode})=>{status.textContent=Math.round(scale*100)+'%';imageFitMode=['width','height'].includes(mode)?mode:'fit';for(const key of ['fit','width','height'])$('#image-'+key).setAttribute('aria-pressed',String(mode===key));},

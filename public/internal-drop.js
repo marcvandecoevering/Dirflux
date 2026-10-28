@@ -7,20 +7,20 @@ export function dropOperation(event, started = null) {
 
 export function readInternalDrop(raw) {
   let item;
-  try { item = JSON.parse(raw); } catch { throw new Error('Ongeldige sleepgegevens.'); }
+  try { item = JSON.parse(raw); } catch { throw new Error('Invalid drag data.'); }
   if (!item || typeof item.path !== 'string' || !item.path ||
       item.path.includes('\\') || item.path.includes('\0') ||
       item.path.split('/').some(part => !part || part === '.' || part === '..') ||
       typeof item.directory !== 'boolean' ||
       (item.operation != null && !['copy', 'move'].includes(item.operation))) {
-    throw new Error('Ongeldige sleepgegevens.');
+    throw new Error('Invalid drag data.');
   }
   // Derive the target name from the path rather than trusting another payload field.
   return { path:item.path, name:item.path.split('/').at(-1), directory:item.directory, operation:item.operation ?? null };
 }
 
 export function dropTransfer(item, destination, operation) {
-  if (!['copy', 'move'].includes(operation)) throw new Error('Ongeldige sleepbewerking.');
+  if (!['copy', 'move'].includes(operation)) throw new Error('Invalid drag operation.');
   const target = [destination, item.name].filter(Boolean).join('/');
   if (operation === 'move' && item.path === target) return null;
   return { source:item.path, target, operation, conflict:'rename' };
