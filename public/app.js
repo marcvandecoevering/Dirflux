@@ -1,4 +1,5 @@
 import { bindImageViewer } from './image-viewer.js';
+import { dropOperation, readInternalDrop, dropTransfer } from './internal-drop.js';
 import { isAudio, isVideo, nextTrack, audioFailureRecovery, bindVideoPlayback } from './media-playback.js';
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -287,7 +288,7 @@ function renderPane(index) {
   el.querySelectorAll('[data-item]').forEach(row => {
     const item = pane.items.find(i => i.path === row.dataset.item);
     row.draggable=canWrite();
-    row.ondragstart=e=>{e.dataTransfer.setData('application/x-droppy-path',JSON.stringify({path:item.path,name:item.name,directory:item.directory}));e.dataTransfer.effectAllowed='copyMove';};
+    row.ondragstart=e=>{e.dataTransfer.setData('application/x-droppy-path',JSON.stringify({path:item.path,directory:item.directory,operation:dropOperation(e)}));e.dataTransfer.effectAllowed='copyMove';};
     row.onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey){e.preventDefault();pane.selected.has(item.path)?pane.selected.delete(item.path):pane.selected.add(item.path);renderPane(index);}};
     const shareButton=row.querySelector('[data-share]'),trashButton=row.querySelector('[data-trash]');
     if(shareButton)on(shareButton,'click',()=>share(item));
@@ -305,7 +306,12 @@ function renderPane(index) {
   on(el, 'drop', async e => {
     e.preventDefault(); el.classList.remove('drop-target'); setActive(index); if (!canWrite()) return;
     const internal=e.dataTransfer.getData('application/x-droppy-path');
-    if(internal){const item=JSON.parse(internal);return formDialog('Move or copy', '<label>Operation<select name="operation"><option value="move">Move</option><option value="copy">Copy</option></select></label>', 'Apply',async form=>{await api('/transfer',{method:'POST',body:{source:item.path,target:join(pane.path,item.name),operation:form.get('operation'),conflict:'rename'}});},item.name+' → /'+pane.path);}
+    if(internal){
+      const item=readInternalDrop(internal),destination=pane.path,operation=dropOperation(e,item.operation);
+      const perform=async operation=>{const body=dropTransfer(item,destination,operation);if(body)await api('/transfer',{method:'POST',body});};
+      if(operation){await perform(operation);await refreshAll();return;}
+      return formDialog('Verplaatsen of kopiëren', '<label>Bewerking<select name="operation"><option value="move">Verplaatsen</option><option value="copy">Kopiëren</option></select></label>', 'Toepassen',async form=>perform(form.get('operation')),item.name+' → /'+destination);
+    }
     const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
     const destination=pane.path;
     const fallback=[...e.dataTransfer.files].map(file=>({file,path:file.name}));
