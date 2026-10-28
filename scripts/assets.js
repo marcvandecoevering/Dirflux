@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 import { build } from 'esbuild';
 const root = path.resolve(import.meta.dirname,'..');
 const generated = path.resolve(root,'public/vendor');
@@ -18,10 +19,34 @@ for(const input of Object.keys(result.metafile.inputs)){
   if(input.includes('node_modules/'))packages.add(parts[0].startsWith('@')?parts.slice(0,2).join('/'):parts[0]);
 }
 await fs.mkdir(path.join(root,'public/vendor/licenses'),{recursive:true});
-for(const name of packages){
+const licenseManifest=[];
+for(const name of [...packages].sort()){
   const directory=path.join(root,'node_modules',name);
-  for(const filename of await fs.readdir(directory))if(/^licen[sc]e(?:\.|$|-)/i.test(filename)){
-    if((await fs.stat(path.join(directory,filename))).isFile())await fs.copyFile(path.join(directory,filename),path.join(root,'public/vendor/licenses',name.replaceAll('/','-')+'-'+filename+'.txt'));
+  const metadata=JSON.parse(await fs.readFile(path.join(directory,'package.json'),'utf8'));
+  const files=[];
+  let hasLicense=false;
+  for(const filename of (await fs.readdir(directory)).sort())if(/^(?:licen[sc]e|notice|copying|authors)(?:\.|$|-)/i.test(filename)){
+    if((await fs.stat(path.join(directory,filename))).isFile()){
+      const content=await fs.readFile(path.join(directory,filename));
+      if(!content.length)throw new Error(`Empty third-party notice: ${name}/${filename}`);
+      const target=encodeURIComponent(name)+'-'+filename+'.txt';
+      await fs.writeFile(path.join(generated,'licenses',target),content);
+      files.push({path:target,sha256:createHash('sha256').update(content).digest('hex')});
+      if(/^(?:licen[sc]e|copying)(?:\.|$|-)/i.test(filename))hasLicense=true;
+    }
   }
+  // These npm packages omit the monorepo license. Use the reviewed, pinned
+  // upstream version only; a dependency update must revalidate this fallback.
+  if(!hasLicense&&name.startsWith('@uiw/codemirror-')&&metadata.version==='4.25.12'&&metadata.license==='MIT'&&metadata.repository?.url==='https://github.com/uiwjs/react-codemirror.git'){
+    const content=await fs.readFile(path.join(root,'src/third-party-licenses/uiw-react-codemirror-4.25.12-LICENSE.txt'));
+    if(createHash('sha256').update(content).digest('hex')!=='fd1f049b3bb5cbaf5143516b72dbc6805cd30cca0cda94edb37160e37662fd17')throw new Error('Pinned uiw license text has changed; review upstream attribution.');
+    const target=encodeURIComponent(name)+'-LICENSE.txt';
+    await fs.writeFile(path.join(generated,'licenses',target),content);
+    files.push({path:target,sha256:createHash('sha256').update(content).digest('hex'),source:'https://raw.githubusercontent.com/uiwjs/react-codemirror/1e2e11f865860c6bd5029d71a2a09bd894ed5bad/LICENSE'});
+    hasLicense=true;
+  }
+  if(!hasLicense)throw new Error(`No license text found for bundled package ${name}; review its distribution notices before building.`);
+  licenseManifest.push({name,version:metadata.version,license:metadata.license??null,files});
 }
+await fs.writeFile(path.join(generated,'licenses','packages.json'),JSON.stringify({schemaVersion:1,packages:licenseManifest},null,2)+'\n');
 console.log('Editor and PDF assets built locally.');

@@ -4,6 +4,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import {createHash} from 'node:crypto';
 import { packRelease } from './package.js';
 const root=path.resolve(import.meta.dirname,'..');
 const npm=process.env.npm_execpath;
@@ -56,6 +57,18 @@ try {
   await assert.rejects(fs.stat(path.join(app,'test')),{code:'ENOENT'},'Test fixtures, including public TLS test keys, must not ship');
   await assert.rejects(fs.stat(path.join(app,'.env')),{code:'ENOENT'},'Local deployment settings must not ship');
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(app,'npm-shrinkwrap.json'),'utf8')),JSON.parse(await fs.readFile(path.join(root,'package-lock.json'),'utf8')));
+  const licenses=JSON.parse(await fs.readFile(path.join(app,'public/vendor/licenses/packages.json'),'utf8'));
+  assert.equal(licenses.schemaVersion,1);assert.ok(licenses.packages.length>0);
+  const lock=JSON.parse(await fs.readFile(path.join(app,'npm-shrinkwrap.json'),'utf8'));
+  for(const entry of licenses.packages){
+    assert.equal(entry.version,lock.packages['node_modules/'+entry.name].version,`Bundled version differs from lockfile: ${entry.name}`);
+    assert.ok(entry.files.length>0,`Missing license files: ${entry.name}`);
+    for(const file of entry.files){
+      assert.equal(path.basename(file.path),file.path,'License manifest paths must be local filenames');
+      const bytes=await fs.readFile(path.join(app,'public/vendor/licenses',file.path));
+      assert.equal(createHash('sha256').update(bytes).digest('hex'),file.sha256,`License contents differ: ${file.path}`);
+    }
+  }
   runNpm(['ci','--omit=dev','--ignore-scripts'],app);
   execFileSync(process.execPath,['scripts/ensure-assets.js'],{cwd:app,timeout:30000});
   let base=await start(app);
