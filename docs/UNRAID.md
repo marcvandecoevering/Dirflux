@@ -8,6 +8,17 @@ New empty storage folders are prepared automatically. No XML download, console c
 
 ## Through Docker → Add Container
 
+1. Open the **Docker** tab in Unraid and click **Add Container**. Start with an empty template.
+2. In **Repository**, paste this complete image address:
+
+   ```text
+   ghcr.io/marcvandecoevering/dirflux:beta
+   ```
+
+   This is the published Docker image in GitHub Container Registry (GHCR). The GitHub source repository URL (`https://github.com/marcvandecoevering/Dirflux`) does not go in this field. The image is public; no GitHub login, repository clone or manual download is required.
+3. Set the name and network, then use **Add another Path, Port, Variable, Label or Device** to add the two paths, port and password variable shown below. For paths, enter both the host path and container path; for the variable, use `INITIAL_ADMIN_PASSWORD` as the key and your password as the value.
+4. Click **Apply**. Unraid automatically downloads (pulls) the image from GHCR and creates and starts the container. Wait for the download and startup to finish.
+
 | Setting | Value |
 | --- | --- |
 | Name | `Dirflux` |
@@ -18,7 +29,7 @@ New empty storage folders are prepared automatically. No XML download, console c
 | Appdata path | `/mnt/user/appdata/dirflux` → `/config`, read/write |
 | Variable `INITIAL_ADMIN_PASSWORD` | Your chosen password, 12–1024 characters |
 
-Click **Apply** and open `http://YOUR-SERVER:8094`. Sign in as `admin`. Use another host port if 8094 is already occupied. Privileged mode is not needed.
+Open `http://YOUR-SERVER:8094` and sign in as `admin` with the password you entered. Use another host port if 8094 is already occupied. Privileged mode is not needed.
 
 The [Apps template](https://github.com/marcvandecoevering/unraid-templates/blob/main/templates/dirflux.xml) also supplies restricted container settings automatically. For the same restrictions in a manual installation, use Advanced View → Extra Parameters:
 
