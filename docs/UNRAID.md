@@ -1,36 +1,55 @@
 # Install Dirflux on Unraid
 
-Dirflux is currently a beta. Community Applications submission is being prepared; it is not yet listed in Apps.
+## Through Apps
 
-## Install before the Apps listing
+When Dirflux appears in Community Applications, search for **Dirflux**, click **Install**, choose your files folder and host port, then click **Apply**. Open **WebUI** to finish setup. The template supplies the container settings below.
 
-1. Download [dirflux.xml](https://raw.githubusercontent.com/marcvandecoevering/unraid-templates/main/templates/dirflux.xml) to `/boot/config/plugins/dockerMan/templates-user/my-Dirflux.xml` on your Unraid server.
-2. Create separate Files and Appdata directories writable by UID 99/GID 100. Use dedicated folders; never recursively change ownership of an existing share.
-3. Open **Docker → Add Container**, select **Dirflux**, check both paths and choose a free host port (default `8094`). Click **Apply**.
-4. Open the container console and run `cat /config/setup-token`. Open **WebUI** and use that code to create your administrator account.
+The central [Unraid catalog](https://github.com/marcvandecoevering/unraid-templates) is registered. Dirflux visibility in Apps has not yet been confirmed. If it is not available, use **Add Container** below; downloading an XML file is not required.
 
-## Container settings
+## Through Docker → Add Container
 
-Use the published version from [GitHub Releases](https://github.com/marcvandecoevering/Dirflux/releases). The template will select AMD64 or ARM64 automatically.
+Choose an empty template and enter:
 
 | Setting | Value |
 | --- | --- |
-| WebUI | `http://YOUR-SERVER:8094` |
-| Container port | `8094/tcp` |
-| Files | A dedicated share mapped to `/files` |
-| Appdata | A separate private folder mapped to `/config` |
-| Container user | `99:100` |
+| Name | `Dirflux` |
+| Repository (Docker image, not GitHub URL) | `ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2` |
+| Network type | `Bridge` |
+| Port mapping | Host `8094` → container `8094`, TCP; choose another host port if occupied |
+| Files path | Your files folder → `/files`, read/write |
+| Appdata path | `/mnt/user/appdata/dirflux` → `/config`, read/write |
+| Console shell | `Shell` (`sh`) |
+| Privileged | Off |
 
-Create separate directories for Files and Appdata that UID 99/GID 100 can write. Do not place either directory inside the other. Do not change ownership recursively on an existing share. The template drops capabilities and runs with a read-only container root; `/files`, `/config` and temporary storage remain writable.
+In **Advanced View**, set **Extra Parameters** to:
 
-Open the container console and run `cat /config/setup-token`. Enter the code in the WebUI and choose an administrator password of at least 12 characters. There is no default login. The setup-token file is removed after setup.
+```text
+--user=99:100 --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs=/tmp:rw,noexec,nosuid,size=64m
+```
 
-## Use and update
+No environment variables are required for ordinary use. The image already sets its listening address, port and internal storage paths. `PUID` and `PGID` variables are not supported by this version; `--user=99:100` selects the Unraid user instead.
 
-- All accounts share the files you expose through `/files`. Mount only what you intend to manage.
-- For read-only browsing, enable **Read only** and optionally mount `/files` read-only. `/config` must remain writable.
-- Use an HTTPS reverse proxy for remote access and set **Secure cookies** to `true`. Do not enable secure cookies while accessing over HTTP.
-- Before updating, stop Dirflux and back up both mapped directories. Edit **Repository** to the new release's versioned image tag and apply, preserving both paths. The template pins a version; checking for updates alone does not select a newer version tag. Keep the previous image version and matching backup for rollback.
-- Removing the container must not remove your mapped directories. Keep backups outside those directories.
+Click **Apply**, then open `http://YOUR-SERVER:8094` (or your chosen host port).
 
-[Configuration](OPERATIONS.md) · [Support](https://github.com/marcvandecoevering/Dirflux/issues) · [Private security reports](https://github.com/marcvandecoevering/Dirflux/security/advisories/new)
+### Storage permissions in beta 2
+
+Both host folders must be writable by UID 99/GID 100. Keep `/config` separate from and outside the files folder. This image runs without root privileges and cannot repair root-owned folders that Docker may create for missing bind-mount paths. Prepare writable folders before starting; if startup fails with a permission error, check those two folders' ownership and permissions. Do not recursively change ownership of an existing share.
+
+## First administrator
+
+Open the container's **Console** and run:
+
+```sh
+cat /config/setup-token
+```
+
+Enter this one-time code in the WebUI and choose an administrator password of at least 12 characters. There is no default login. The code prevents another visitor from claiming a newly started installation and is removed after setup.
+
+## Optional settings and updates
+
+- `READ_ONLY=true` disables file changes. You may also mount `/files` read-only; `/config` must stay writable.
+- For remote access, use an HTTPS reverse proxy and set `COOKIE_SECURE=true`. Leave it unset for HTTP access on your LAN.
+- All accounts share the files exposed through `/files`; mount only what you intend to manage.
+- Before updating, stop Dirflux and back up both folders. This beta uses a fixed image tag: change **Repository** to the new release's tag and apply, preserving the paths. Checking for image updates alone does not change a fixed version tag.
+
+[Configuration](OPERATIONS.md) · [Releases](https://github.com/marcvandecoevering/Dirflux/releases) · [Support](https://github.com/marcvandecoevering/Dirflux/issues)
