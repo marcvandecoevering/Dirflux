@@ -19,6 +19,7 @@ const kind = item => item.directory ? 'folder' : /\.(png|jpe?g|gif|webp|avif|bmp
 let toastTimer, closeHook = null, refreshBusy = false;
 const uploadJobs = new Set();
 let uploadConflictQueue = Promise.resolve();
+let nativeFullscreenPane = null;
 let videoPlayback = null, imageViewer = null, imageFitMode = 'fit';
 let editorInstance = null, currentMedia = null, clipboard = null, audioItems = [], audioIndex = 0, eventSource = null;
 const defaultPrefs = { theme:'droppy',editorFontSize:16,indentWithTabs:false,indentUnit:4,lineWrapping:false,loop:true,autonext:false,sharelinkDownload:true };
@@ -130,10 +131,28 @@ async function refreshAll(quiet = false) {
     if (!quiet) throw error;
   } finally { refreshBusy = false; }
 }
+async function leavePaneFullscreen(element) {
+  if(document.fullscreenElement===element)await document.exitFullscreen();
+  element?.classList.remove('is-fullscreen');
+}
+async function togglePaneFullscreen(index) {
+  const element=$(`[data-pane="${index}"]`);
+  setActive(index);
+  if(element.classList.contains('is-fullscreen'))return leavePaneFullscreen(element);
+  element.classList.add('is-fullscreen');
+  if(document.fullscreenEnabled&&element.requestFullscreen) {
+    try {await element.requestFullscreen();nativeFullscreenPane=element;}
+    catch {toast('Vergroot binnen de app; deze browser staat volledig scherm niet toe.');}
+  }
+}
+document.addEventListener('fullscreenchange',()=>{
+  if(nativeFullscreenPane&&document.fullscreenElement!==nativeFullscreenPane){nativeFullscreenPane.classList.remove('is-fullscreen');nativeFullscreenPane=null;}
+});
 async function navigate(index, path) {
   const pane = state.panes[index];
   const frame=$(`[data-pane="${index}"] iframe`);
   if(frame && frame.contentWindow.confirmCloseView?.()===false)return;
+  await leavePaneFullscreen($(`[data-pane="${index}"]`));
   if(frame)frame.remove();pane.open=null;
   pane.path = path; pane.query = ''; pane.selected.clear();
   setActive(index); $('#search').value = ''; await loadPane(index);recordLocation();
@@ -574,7 +593,7 @@ on($('#login-form'), 'submit', async e => {
   catch (error) { $('#auth-error').textContent = error.message; }
   finally { $('#login-button').disabled = false; }
 });
-on($('#logout'), 'click', async () => { if($$('.file-view').some(f=>f.contentWindow.confirmCloseView?.()===false))return; const wasGuest=state.user?.guest; await api('/logout', { method:'POST' }); if(wasGuest){location.href='/?login=1';return;} state.user = null; state.panes = [{ path:'', items:[], selected:new Set(), sort:'name' }]; state.active = 0; await init(); });
+on($('#logout'), 'click', async () => { if($$('.file-view').some(f=>f.contentWindow.confirmCloseView?.()===false))return; const wasGuest=state.user?.guest; for(const pane of $$('.pane.is-fullscreen'))await leavePaneFullscreen(pane); await api('/logout', { method:'POST' }); if(wasGuest){location.href='/?login=1';return;} state.user = null; state.panes = [{ path:'', items:[], selected:new Set(), sort:'name' }]; state.active = 0; await init(); });
 on($('#refresh'), 'click', () => refreshAll());
 on($('#new-folder'), 'click', () => create(true)); on($('#new-file'), 'click', () => create(false));
 $('#upload-button').onclick = () => $('#file-input').click(); $('#upload-folder').onclick = () => $('#folder-input').click();
@@ -628,7 +647,17 @@ on(document, 'paste', async e => {
     if (text) await formDialog('Tekst opslaan als bestand', '<label>Bestandsnaam<input name="name" value="geplakte-tekst.txt" required></label>', 'Opslaan', async form => { const file = new File([text], form.get('name'), { type:'text/plain' }); await upload([{ file, path:file.name }], active().path); });
   }
 });
-window.addEventListener('message',e=>{if(e.origin!==location.origin||!['droppy-close','droppy-fullscreen'].includes(e.data?.type))return;const index=state.panes.findIndex((p,i)=>$(`[data-pane="${i}"] iframe`)?.contentWindow===e.source);if(index>=0){if(e.data.type==='droppy-fullscreen'){$(`[data-pane="${index}"]`).classList.toggle('is-fullscreen');return;}$(`[data-pane="${index}"]`).classList.remove('is-fullscreen');$(`[data-pane="${index}"] iframe`).remove();state.panes[index].open=null;renderPane(index);refreshAll(true);recordLocation();}});
+window.addEventListener('message',async e=>{
+  if(e.origin!==location.origin||!['droppy-close','droppy-fullscreen'].includes(e.data?.type))return;
+  const index=state.panes.findIndex((p,i)=>$(`[data-pane="${i}"] iframe`)?.contentWindow===e.source);
+  if(index<0)return;
+  try {
+    if(e.data.type==='droppy-fullscreen'){await togglePaneFullscreen(index);return;}
+    await leavePaneFullscreen($(`[data-pane="${index}"]`));
+    $(`[data-pane="${index}"] iframe`)?.remove();state.panes[index].open=null;
+    renderPane(index);await refreshAll(true);recordLocation();
+  } catch(error){toast(error.message,true);}
+});
 setInterval(() => { if (!viewerMode && state.user && !document.hidden && !$('#dialog').open && !$('.menu') && !state.uploading) refreshAll(true); }, 15000);
 window.addEventListener('popstate',()=>restoreLocation().catch(e=>toast(e.message,true)));
 init().catch(error => {
