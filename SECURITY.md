@@ -35,3 +35,5 @@ Authentication attempts are limited to 15 per 15-minute window per direct socket
 ## Container advisory checks
 
 Container CI runs digest-pinned Trivy 0.76.1 against an archive of each built image. Reports include known OS/package advisories and are retained as workflow artifacts. HIGH or CRITICAL findings block release promotion; lower-severity findings remain visible in the report. npm audit separately checks the dependency tree, including the browser build dependencies. Scanner databases and advisory coverage change over time; neither scan is a full application penetration test.
+
+The runtime container excludes npm/npx after installing production dependencies. They are build/install tools, not needed to run Dirflux. This removes their bundled dependency advisories from the shipped runtime instead of suppressing scan findings. Native installations should use a maintained Node.js release (minimum 24.22.1) and an updated npm installation.

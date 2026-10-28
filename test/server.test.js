@@ -100,8 +100,9 @@ test('file manager integration: accounts, files, permissions, conflicts and shar
     assert.equal(kept.status,201); assert.equal((await kept.json()).path,'Docs (1)');
     const concurrent = await Promise.all([put('conflict.txt','a','&conflict=rename'),put('conflict.txt','b','&conflict=rename')]);
     assert.deepEqual(concurrent.map(r=>r.status),[201,201]);
-    assert.equal(await fs.readFile(path.join(instance.root,'conflict (2).txt'),'utf8'),'a');
-    assert.equal(await fs.readFile(path.join(instance.root,'conflict (3).txt'),'utf8'),'b');
+    // Concurrent bodies can finish in either order; both must survive distinctly.
+    const saved=await Promise.all(['conflict (2).txt','conflict (3).txt'].map(name=>fs.readFile(path.join(instance.root,name),'utf8')));
+    assert.deepEqual(saved.sort(),['a','b']);
     await fs.writeFile(path.join(instance.root,'.app-tmp-protected'),'private staging');
     assert.equal((await request('/api/file?path=.app-tmp-protected')).status,403);
     assert.equal((await json('/api/files')).items.some(i=>i.name.startsWith('.app-tmp-')),false);

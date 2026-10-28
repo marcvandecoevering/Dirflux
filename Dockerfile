@@ -16,7 +16,8 @@ LABEL org.opencontainers.image.revision=$SOURCE_REVISION \
       org.opencontainers.image.licenses="BSD-2-Clause"
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY server.js ./
 COPY lib ./lib
 COPY --from=assets /build/public ./public

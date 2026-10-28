@@ -12,7 +12,7 @@ Your files, in your browser, on your own server. Browse two folders side by side
 
 **Unraid:** use the [installation guide](docs/UNRAID.md). Dirflux is not yet listed in Community Applications.
 
-**Without Docker:** install Node.js 24, clone this repository, then run:
+**Without Docker:** install Node.js 24.22.1 or newer, clone this repository, then run:
 
 ```sh
 npm ci
@@ -27,12 +27,12 @@ Open `http://127.0.0.1:8094`. Read `data/config/setup-token` to create your admi
 
 | Area | Dependencies / behavior |
 | --- | --- |
-| Language & server | JavaScript, Node.js 24, Express 5; SQLite database |
+| Language & server | JavaScript, Node.js 24.22.1+, Express 5; SQLite database |
 | Browser | CodeMirror 6 text editor, PDF.js, native browser media codecs; all assets served locally |
 | Network | HTTP or HTTPS (native TLS 1.2+), JSON API, Server-Sent Events and HTTP range downloads |
 | Storage | Local or host-mounted files; no built-in SMB, FTP or WebDAV server |
 | Privacy | No telemetry, CDN or third-party account required |
-| Updates | Versioned releases; dependency vulnerability checks; updates require installation |
+| Updates | Versioned releases; dependency and container vulnerability checks; updates require installation |
 
 All users share one file tree. Public links grant access without login. Media is not transcoded. Keep private configuration outside shared files, back up both directories and use one app process per configuration directory. Do not give untrusted host processes write access to this storage.
 
