@@ -4,7 +4,7 @@ This project is in development. No stable version or public security-support com
 
 ## Reporting
 
-Before the first public release, maintainers must enable private vulnerability reporting on the GitHub repository and verify its reporting flow. Once enabled, use the repository's Security tab and **Report a vulnerability**. Do not include passwords, session cookies, installation codes, private links, personal filenames or live user data in public issues.
+Private vulnerability reporting is enabled on the public GitHub repository. Use [Report a vulnerability](https://github.com/marcvandecoevering/Dirflux/security/advisories/new), or the repository's Security tab. Do not include passwords, session cookies, installation codes, private links, personal filenames or live user data in public issues.
 
 A useful report includes the affected version, minimal reproduction with synthetic data, platform and filesystem, impact, and any proposed fix. There is no bug bounty or guaranteed response-time agreement.
 
@@ -16,7 +16,7 @@ A useful report includes the affected version, minimal reproduction with synthet
 4. Review the change and release notes; publish versioned source/packages/images from the reviewed revision.
 5. Notify users through the release notes and Unraid update metadata. Document required configuration changes or mitigations.
 
-Dependabot is configured for weekly version-update pull requests. GitHub dependency graph, Dependabot alerts/security updates, private reporting and branch protection still need to be enabled and verified on the actual repository. Verification CI uses read-only permissions; the optional draft-release job alone receives contents-write permission. Update pull requests are not automatically merged or released.
+Dependabot is configured for weekly version-update pull requests. Dependabot update jobs are running on GitHub; vulnerability alerts, automated security-update pull requests and private reporting are enabled. Branch protection and the complete private reporting submission flow remain to be verified. Verification CI uses read-only permissions; the optional draft-release job alone receives contents-write permission. Update pull requests are not automatically merged or released.
 
 The manual release-candidate workflow resolves an existing version tag to an exact commit, runs the verification workflow on it, and creates a checksummed native candidate only after those jobs pass. Packaging verifies that the tag still points to the selected commit. An optional input creates a draft prerelease after verifying the downloaded candidate and remote tag again; it does not publish that draft or push images. Candidate metadata and SHA-256 checksums provide traceability and integrity checks, not a signature or a promise of security support.
 

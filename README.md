@@ -1,5 +1,9 @@
 # Dirflux
 
+<img src="public/brand/dirflux-192.png" alt="Dirflux logo" width="96" height="96">
+
+[![Verify](https://github.com/marcvandecoevering/Dirflux/actions/workflows/ci.yml/badge.svg)](https://github.com/marcvandecoevering/Dirflux/actions/workflows/ci.yml)
+
 A self-hosted file manager being rebuilt around droppy's functionality, with a maintained backend and a new identity. **Development preview: not yet a stable release or an approved Unraid Community Applications listing.** The selected name is Dirflux; the app now uses its own logo. Source: [marcvandecoevering/Dirflux](https://github.com/marcvandecoevering/Dirflux).
 
 The implementation uses Node.js 24, Express, SQLite, CodeMirror 6 and PDF.js. Browser assets are served locally. There is no external CDN, telemetry or automatic application-code updater.
