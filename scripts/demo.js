@@ -13,6 +13,10 @@ await fs.writeFile(path.join(instance.root,'Documenten','Notities.txt'), 'Mijn n
 await fs.writeFile(path.join(instance.root,'Projecten','instellingen.json'), JSON.stringify({ project:'Droppy Next', status:'demo' },null,2));
 await fs.writeFile(path.join(instance.root,'Documenten','Voorbeeld.pdf'),samplePdf());
 await fs.writeFile(path.join(instance.root,'Geluidstest.wav'),sampleWav());
+await fs.writeFile(path.join(instance.root,'Geluidstest-2.wav'),sampleWav());
+for(const [source,name] of [['blue.mp4','Video-1.mp4'],['green.mp4','Video-2.mp4']]) {
+  await fs.copyFile(path.resolve(import.meta.dirname,'../test/fixtures/media',source),path.join(instance.root,name));
+}
 await fs.copyFile(path.resolve(import.meta.dirname,'../public/original/logo192.png'),path.join(instance.root,'Foto’s','Droppy.png'));
 const server = instance.listen(18094,'127.0.0.1');
 await new Promise(resolve=>server.once('listening',resolve));
