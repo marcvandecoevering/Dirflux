@@ -8,7 +8,7 @@ The implementation uses Node.js 24, Express, SQLite, CodeMirror 6 and PDF.js. Br
 
 [Functional comparison and release gates](docs/PARITY.md) records the reference behavior, available evidence and outstanding work. Existing droppy users, credentials, files, links and configuration do not need migration and are not imported. The new UI may differ visually while preserving the original capabilities.
 
-Current verification on Windows: 49 automated tests pass. Browser checks cover upload replace/keep-both flows and concurrent uploads with independent cancellation. The native release archive passes production-only installation, switching installation directories with persistent data, and restoring a consistent backup into separate storage. Both installations use the current build; cross-version migrations are not verified. GitHub CI is configured for Windows, Linux and macOS, plus a restricted Linux container test; these workflows have **not yet run on GitHub**. The local Docker engine is unavailable, so container support is not yet verified.
+Current verification on Windows: 49 automated tests pass. Browser checks cover upload replace/keep-both flows and concurrent uploads with independent cancellation. The native release archive passes production-only installation, switching installation directories with persistent data, and restoring a consistent backup into separate storage. Both installations use the current build; cross-version migrations are not verified. GitHub CI is configured for Windows, Linux and macOS, plus a restricted Linux container test; these workflows have **not yet run on GitHub**. The amd64 image passes the Docker Desktop Linux-volume smoke test: UID/GID 99:100, actual uploaded-file ownership, read-only container root, no capabilities, healthcheck, restart persistence and a read-only files volume. Linux host bind mounts, ARM64 and Unraid itself remain unverified.
 
 ## Run from source
 
@@ -63,7 +63,7 @@ docker build -t local/file-app-ci .
 node scripts/container-smoke.js local/file-app-ci
 ```
 
-The smoke test uses temporary data, UID/GID 99:100, a read-only container root, no Linux capabilities and no-new-privileges. It tests uploads, restart persistence and a read-only files mount. A passing Compose configuration check alone does not prove any of these behaviors.
+The smoke test uses temporary data, UID/GID 99:100, a read-only container root, no Linux capabilities and no-new-privileges. It tests uploads, restart persistence and a read-only files mount. On Windows this uses temporary Linux volumes with copying disabled to preserve assigned ownership; Linux CI uses temporary host bind mounts. A passing Compose configuration check alone does not prove any of these behaviors.
 
 ## Implemented capabilities
 

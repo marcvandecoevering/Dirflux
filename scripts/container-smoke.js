@@ -14,10 +14,18 @@ const temporary = await fs.mkdtemp(path.join(os.tmpdir(),'file-app-container-'))
 const name = 'file-app-test-' + crypto.randomBytes(6).toString('hex');
 const password = crypto.randomBytes(32).toString('hex');
 const files = path.join(temporary,'files'), config = path.join(temporary,'config');
+// Windows bind mounts do not preserve Linux UID/GID ownership. Use isolated
+// Linux volumes there; Linux CI still exercises actual host bind mounts.
+const linuxVolumes=process.platform==='win32',createdVolumes=[];
+const filesMount=linuxVolumes?`type=volume,src=${name}-files,dst=/files,volume-nocopy`:`type=bind,src=${files},dst=/files`;
+const configMount=linuxVolumes?`type=volume,src=${name}-config,dst=/config,volume-nocopy`:`type=bind,src=${config},dst=/config`;
 await fs.mkdir(files,{mode:0o777}); await fs.mkdir(config,{mode:0o777});
 await fs.chmod(files,0o777); await fs.chmod(config,0o777);
 let base, cookie, csrf, running=false;
 async function waitHealthy() {
+  // Docker may assign another ephemeral host port when restarting a container.
+  const port=docker('port',name,'8094/tcp').split(':').at(-1);
+  base='http://127.0.0.1:'+port;
   for (let i=0;i<60;i++) {
     try { if ((await fetch(base+'/api/health',{signal:AbortSignal.timeout(1000)})).ok) return; } catch {}
     await new Promise(resolve=>setTimeout(resolve,250));
@@ -27,12 +35,11 @@ async function waitHealthy() {
 async function start(readOnly=false) {
   docker('run','--detach','--name',name,'--user','99:100','--read-only','--cap-drop=ALL','--security-opt','no-new-privileges',
     '--tmpfs','/tmp:rw,noexec,nosuid,size=64m','--publish','127.0.0.1::8094',
-    '--mount',`type=bind,src=${files},dst=/files${readOnly?',readonly':''}`,
-    '--mount',`type=bind,src=${config},dst=/config`,'--env',`READ_ONLY=${readOnly}`,image);
+    '--mount',filesMount+(readOnly?',readonly':''),
+    '--mount',configMount,'--env',`READ_ONLY=${readOnly}`,image);
   running=true;
-  const port = docker('port',name,'8094/tcp').split(':').at(-1);
-  base='http://127.0.0.1:'+port;
   await waitHealthy();
+  docker('exec',name,'node','lib/health-check.js');
   assert.equal(docker('exec',name,'id','-u'),'99');
   assert.equal(docker('exec',name,'id','-g'),'100');
 }
@@ -46,6 +53,10 @@ async function login(route='/api/login') {
   cookie=response.headers.get('set-cookie').split(';')[0]; csrf=(await response.json()).csrf;
 }
 try {
+  if(linuxVolumes) {
+    for(const suffix of ['files','config']){const volume=name+'-'+suffix;docker('volume','create',volume);createdVolumes.push(volume);}
+    docker('run','--rm','--user','0:0','--mount',filesMount,'--mount',configMount,'--entrypoint','sh',image,'-c','chown 99:100 /files /config');
+  }
   await start();
   assert.equal((await request('/api/files')).status,401);
   await login('/api/setup');
@@ -54,7 +65,8 @@ try {
   docker('restart',name); await waitHealthy(); await login();
   const restored=await request('/api/text?path=persist.txt');
   assert.equal((await restored.json()).text,'persistent content');
-  assert.equal((await fs.stat(path.join(files,'persist.txt'))).uid,99);
+  assert.equal(docker('exec',name,'stat','-c','%u:%g','/files/persist.txt'),'99:100');
+  if(!linuxVolumes)assert.equal((await fs.stat(path.join(files,'persist.txt'))).uid,99);
   docker('rm','--force',name); running=false;
   await start(true); await login();
   assert.equal((await request('/api/create','POST',{path:'forbidden.txt'})).status,403);
@@ -62,6 +74,7 @@ try {
   console.log('Container smoke passed: UID/GID 99:100, restricted filesystem, upload, restart persistence and read-only mount.');
 } finally {
   if(running) docker('rm','--force',name);
+  for(const volume of createdVolumes)docker('volume','rm',volume);
   // Only delete the freshly-created test directory, never a supplied path.
   if(path.dirname(path.resolve(temporary))!==path.resolve(os.tmpdir()) || !path.basename(temporary).startsWith('file-app-container-')) throw new Error('Unsafe test cleanup path');
   await fs.rm(temporary,{recursive:true,force:true});
