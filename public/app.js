@@ -184,7 +184,7 @@ function renderPane(index) {
       } finally {pane.loadingMore=false;more.disabled=false;}
     });
   }
-  if (clipboard && canWrite()) { const paste=document.createElement('button');paste.className='paste-floating';paste.textContent='Paste here';el.append(paste);on(paste,'click',()=>pasteFiles(pane.path)); }
+  if (clipboard && canWrite()) { const paste=document.createElement('button');paste.className='paste-floating';paste.textContent=clipboard.busy?'Plakken…':'Paste here';paste.disabled=!!clipboard.busy;el.append(paste);on(paste,'click',()=>pasteFiles(pane.path)); }
   el.querySelectorAll('[data-tool]').forEach(button=>on(button,'click',async e=>{
     e.preventDefault();setActive(index);
     switch(button.dataset.tool){
@@ -281,10 +281,24 @@ async function transfer(items, operation) {
   }, `${items.length} item(s). Voer een bestaande map in, bijvoorbeeld Documenten/Archief. Bij een naamconflict wordt een vrije naam gekozen; beide items blijven bewaard.`);
 }
 async function pasteFiles(destination) {
-  if (!clipboard || !canWrite()) return;
-  for (const item of clipboard.items) await api('/transfer',{method:'POST',body:{source:item.path,target:join(destination,item.name),operation:clipboard.operation,conflict:'rename'}});
-  if(clipboard.operation==='move')clipboard=null;
-  renderPanes();await refreshAll();toast('Files pasted.');
+  if (!clipboard || !canWrite() || clipboard.busy) return;
+  const batch=clipboard,items=[...batch.items],operation=batch.operation;
+  let completed=0;
+  batch.busy=true;renderPanes();
+  try {
+    for(const item of items) {
+      await api('/transfer',{method:'POST',body:{source:item.path,target:join(destination,item.name),operation,conflict:'rename'}});
+      completed++;
+    }
+    if(clipboard===batch&&operation==='move')clipboard=null;
+    toast('Files pasted.');
+  } finally {
+    batch.busy=false;
+    // Retrying a partial operation must not repeat already completed transfers.
+    // Never clear or alter a newer clipboard selection made during this batch.
+    if(clipboard===batch&&completed<items.length)batch.items=items.slice(completed);
+    renderPanes();await refreshAll();
+  }
 }
 async function openPdf(item) {
   showDialog(item.name,'<div class="pdf-scroll"><canvas id="pdf-canvas" aria-label="PDF page"></canvas></div><div class="preview-controls"><button class="secondary" id="pdf-prev">←</button><span class="pdf-info" id="pdf-info">Loading PDF…</span><button class="secondary" id="pdf-next">→</button><button class="secondary" id="pdf-out">−</button><button class="secondary" id="pdf-in">+</button><button class="secondary" id="pdf-download">Download</button></div>','preview-dialog');
