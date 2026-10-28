@@ -14,7 +14,9 @@ const canWrite = () => !state.readOnly && state.user?.role !== 'viewer';
 const size = n => n < 1024 ? n + ' B' : n < 1024 ** 2 ? (n / 1024).toFixed(1) + ' KB' : n < 1024 ** 3 ? (n / 1024 ** 2).toFixed(1) + ' MB' : (n / 1024 ** 3).toFixed(1) + ' GB';
 const date = n => new Intl.DateTimeFormat('nl-NL', { day: '2-digit', month: 'short', year: 'numeric' }).format(n);
 const kind = item => item.directory ? 'folder' : /\.(png|jpe?g|gif|webp|avif|bmp)$/i.test(item.name) ? 'image' : /\.(mp4|webm|ogv|mp3|wav|ogg|m4a|flac)$/i.test(item.name) ? 'media' : 'file';
-let toastTimer, uploadRequest, uploadCancelled = false, closeHook = null, refreshBusy = false;
+let toastTimer, closeHook = null, refreshBusy = false;
+const uploadJobs = new Set();
+let uploadConflictQueue = Promise.resolve();
 let editorInstance = null, currentMedia = null, clipboard = null, audioItems = [], audioIndex = 0, eventSource = null;
 const defaultPrefs = { theme:'droppy',editorFontSize:16,indentWithTabs:false,indentUnit:4,lineWrapping:false,loop:true,autonext:false,sharelinkDownload:true };
 let prefs;
@@ -390,57 +392,78 @@ async function showUsers() {
   }));
   on($('#add-user'), 'click', () => formDialog('Gebruiker toevoegen', '<label>Gebruikersnaam<input name="name" required maxlength="64" autocomplete="off"></label><label>Wachtwoord<input name="password" type="password" required minlength="12" maxlength="1024" autocomplete="new-password"></label><label>Rol<select name="role"><option value="editor">Bewerken</option><option value="viewer">Alleen lezen</option><option value="admin">Beheerder</option></select></label>', 'Gebruiker toevoegen', async form => { await api('/users', { method:'POST', body:Object.fromEntries(form) }); toast('Gebruiker toegevoegd.'); }));
 }
-function chooseUploadConflict(name, directory) {
-  return new Promise(resolve => {
+function chooseUploadConflict(name, directory, job) {
+  const result=uploadConflictQueue.then(async()=>{
+    const dialog=$('#dialog');
+    while(dialog.open)await new Promise(resolve=>dialog.addEventListener('close',resolve,{once:true}));
+    if(job.cancelled)return 'skip';
+    return new Promise(resolve => {
     showDialog('Deze naam bestaat al', `<p>${escape(name)}</p><p>${directory ? 'Er bestaat al een map met deze naam.' : 'Wil je het bestaande bestand vervangen of beide versies bewaren?'}</p><div class="dialog-actions"><button data-conflict="skip" class="secondary">Overslaan</button><button data-conflict="rename" class="primary">Beide bewaren</button>${directory ? '' : '<button data-conflict="replace" class="danger">Vervangen</button>'}</div>`);
-    const dialog = $('#dialog');
-    const cancelled = () => resolve('skip');
-    dialog.addEventListener('close', cancelled, {once:true});
+    let choice='skip';
+    job.closeConflict=()=>closeDialog();
+    dialog.addEventListener('close', () => {job.closeConflict=null;resolve(choice);}, {once:true});
     $$('[data-conflict]').forEach(button => on(button,'click',() => {
-      dialog.removeEventListener('close', cancelled);
-      const choice = button.dataset.conflict;
-      closeDialog(); resolve(choice);
+      choice = button.dataset.conflict;
+      closeDialog();
     }));
+    });
   });
+  uploadConflictQueue=result.catch(()=>{});
+  return result;
 }
 async function upload(files, destination) {
-  if (state.uploading) return toast('Wacht tot de huidige upload klaar is.', true);
   if (!files.length || !canWrite()) return;
-  state.uploading = true; uploadCancelled = false; $('#uploads').hidden = false; $('#cancel-upload').hidden = false;
+  const job={cancelled:false,xhr:null,closeConflict:null};
+  const card=document.createElement('article');card.className='upload-job';card.setAttribute('aria-label','Upload naar /'+destination);
+  card.innerHTML='<div><strong></strong><button class="text-button">Annuleren</button></div><small class="upload-destination"></small><progress max="100" value="0"></progress><small class="upload-detail"></small>';
+  const title=card.querySelector('strong'),detail=card.querySelector('.upload-detail'),progress=card.querySelector('progress'),cancel=card.querySelector('button');
+  card.querySelector('.upload-destination').textContent='Naar /'+destination;
+  job.cancel=()=>{job.cancelled=true;job.xhr?.abort();job.closeConflict?.();cancel.disabled=true;};
+  cancel.onclick=job.cancel;
+  uploadJobs.add(job);state.uploading=true;$('#uploads').append(card);$('#uploads').hidden=false;
   const errors = []; let completed = 0;
-  for (let i = 0; i < files.length && !uploadCancelled; i++) {
+  try {
+  for (let i = 0; i < files.length && !job.cancelled; i++) {
     const { file, path, directory } = files[i];
-    $('#upload-title').textContent = `Upload ${i+1} van ${files.length}`; $('#upload-detail').textContent = path; $('#upload-progress').value = 0;
+    title.textContent = `Upload ${i+1} van ${files.length}`; detail.textContent = path; progress.value = 0;
     try {
       const target = join(destination,path);
       const existing = await api('/upload-target?path=' + encodeURIComponent(target));
+      if(job.cancelled)break;
       if(directory) {
         if(existing.exists&&!existing.directory)throw new Error('Een bestand blokkeert deze map. Hernoem het bestand of de uploadmap.');
         if(!existing.exists)await api('/create',{method:'POST',body:{path:target,directory:true}});
         completed++;continue;
       }
-      const conflict = existing.exists ? await chooseUploadConflict(path,existing.directory) : 'reject';
-      if (conflict === 'skip' || uploadCancelled) continue;
+      const conflict = existing.exists ? await chooseUploadConflict(path,existing.directory,job) : 'reject';
+      if (conflict === 'skip' || job.cancelled) continue;
       const query = new URLSearchParams({path:target,conflict});
       if (conflict === 'replace') query.set('version',existing.version);
       await new Promise((resolve, reject) => {
-        const xhr = uploadRequest = new XMLHttpRequest(); xhr.open('PUT', '/api/upload?' + query); xhr.setRequestHeader('X-CSRF-Token', state.csrf); xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-        xhr.upload.onprogress = e => { if (e.lengthComputable) $('#upload-progress').value = e.loaded / e.total * 100; };
+        const xhr = job.xhr = new XMLHttpRequest(); xhr.open('PUT', '/api/upload?' + query); xhr.setRequestHeader('X-CSRF-Token', state.csrf); xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+        xhr.upload.onprogress = e => { if (e.lengthComputable) progress.value = e.loaded / e.total * 100; };
         xhr.onload = () => { if (xhr.status >= 200 && xhr.status < 300) resolve(); else { let message = 'Upload mislukt.'; try { message = JSON.parse(xhr.responseText).error; } catch {} reject(new Error(message)); } };
         xhr.onerror = () => reject(new Error('Verbinding verbroken.')); xhr.onabort = () => reject(new Error('Geannuleerd.')); xhr.send(file);
       }); completed++;
-    } catch (error) { errors.push(path + ': ' + error.message); }
+    } catch (error) { if(!job.cancelled)errors.push(path + ': ' + error.message); }
   }
-  state.uploading = false; uploadRequest = null; $('#uploads').hidden = true;
+  } finally {
+    uploadJobs.delete(job);state.uploading=uploadJobs.size>0;job.xhr=null;
+    if(errors.length) {
+      title.textContent='Upload deels mislukt';detail.textContent=errors.join('\n');cancel.disabled=false;cancel.textContent='Sluiten';
+      cancel.onclick=()=>{card.remove();$('#uploads').hidden=!$('#uploads').childElementCount;};
+    } else card.remove();
+    $('#uploads').hidden=!$('#uploads').childElementCount;
+  }
   await refreshAll();
-  toast(`${completed} van ${files.length} bestand(en)/map(pen) verwerkt.${uploadCancelled ? ' Upload geannuleerd.' : ''}`, errors.length > 0);
-  if (errors.length) showDialog('Niet alle bestanden zijn geüpload', `<p>Succesvol geüploade bestanden blijven bewaard. Bestanden worden alleen vervangen als je daarvoor kiest.</p><div class="dialog-error">${escape(errors.join('\n'))}</div>`);
+  toast(`${completed} van ${files.length} bestand(en)/map(pen) verwerkt.${job.cancelled ? ' Upload geannuleerd.' : ''}`, errors.length > 0);
 }
 async function init() {
   const session = await api('/session'); Object.assign(state, session);
   $('#auth').hidden = !!state.user; $('#shell').hidden = !state.user;
   document.body.classList.toggle('read-only', !!state.user && !canWrite());
   if (!state.user) {
+    for(const job of uploadJobs)job.cancel();
     eventSource?.close();eventSource=null;
     if(!$('.auth-bottom')) {const bottom=document.createElement('div');bottom.className='auth-bottom';bottom.innerHTML='<input type="checkbox" id="remember-me" checked aria-label="Remember Me"><span>Remember Me</span>';$('#login-form').append(bottom);}
     if(!$('#setup-code-label')) {
@@ -480,7 +503,6 @@ for (const id of ['#file-input','#folder-input']) {
   on($(id),'click',e=>{e.target.dataset.destination=active().path;});
   on($(id), 'change', async e => { const files = [...e.target.files].map(file => ({ file, path:file.webkitRelativePath || file.name })); const destination=e.target.dataset.destination??active().path; e.target.value = ''; await upload(files, destination); });
 }
-$('#cancel-upload').onclick = () => { uploadCancelled = true; uploadRequest?.abort(); };
 on($('#split'), 'click', async () => {
   if (state.panes.length === 2) {const frame=$('[data-pane="1"] iframe');if(frame&&frame.contentWindow.confirmCloseView?.()===false)return;state.panes = [state.panes[0]]; state.active = 0; }
   else state.panes.push({ path:active().path, items:[], selected:new Set(), sort:'name' });
