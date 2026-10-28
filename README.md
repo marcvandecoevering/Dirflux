@@ -153,6 +153,8 @@ Folder drag-and-drop includes empty directories when the browser exposes directo
 
 ## Tests and maintenance
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for reporting defects, comparing original functionality, local development and review expectations. GitHub issue forms and a pull-request template are included; their live rendering remains to be verified after repository publication.
+
 ```sh
 npm run check
 npm test

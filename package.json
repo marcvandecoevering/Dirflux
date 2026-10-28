@@ -11,6 +11,7 @@
     "scripts/assets.js",
     "scripts/ensure-assets.js",
     "README.md",
+    "CONTRIBUTING.md",
     "SECURITY.md",
     "LICENSE",
     "LICENSE.droppy",

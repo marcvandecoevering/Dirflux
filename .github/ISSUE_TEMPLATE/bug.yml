@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible problem in the file manager.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For security vulnerabilities, follow SECURITY.md and use private reporting.
+        Public reports must not contain passwords, cookies, installation codes, private share links or personal files.
+        Please use synthetic files and check existing issues first.
+  - type: input
+    id: version
+    attributes:
+      label: Application version or commit
+      description: For containers, include the image tag and digest if available.
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - Native Node.js
+        - Docker / Compose
+        - Unraid
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, CPU architecture, browser/version and Node.js version for native installs. For file-operation problems, mention local disk or network storage and whether multiple mounts are involved.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Give the smallest reproducible sequence using disposable files. Include relevant settings with secrets removed.
+      placeholder: |
+        1. Create a temporary folder containing ...
+        2. Open ...
+        3. Select ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the visible error and whether content changed or was lost.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or screenshots
+      description: Optional. Remove secrets and personal information; do not upload a configuration database or complete storage directory.

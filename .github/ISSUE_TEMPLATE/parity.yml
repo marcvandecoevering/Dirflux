@@ -1,0 +1,36 @@
+name: Functionality comparison
+description: Report an original droppy capability that is missing or behaves differently.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This project targets droppy's functionality with a new backend and identity.
+        Check docs/PARITY.md for current evidence and intentional differences.
+        Use synthetic examples and keep credentials and private links out of reports.
+  - type: input
+    id: version
+    attributes:
+      label: Current application version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: original
+    attributes:
+      label: Original droppy behavior
+      description: Identify the droppy version, steps and observable result. A source reference or screenshot with synthetic content helps distinguish original behavior from a new feature request.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current application behavior
+      description: Include the same steps, actual result and browser/OS.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Effect on your workflow
+      description: Explain what cannot be completed and what comparable behavior would allow.
+    validations:
+      required: true

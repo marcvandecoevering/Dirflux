@@ -16,9 +16,9 @@ A useful report includes the affected version, minimal reproduction with synthet
 4. Review the change and release notes; publish versioned source/packages/images from the reviewed revision.
 5. Notify users through the release notes and Unraid update metadata. Document required configuration changes or mitigations.
 
-Dependabot is configured for weekly version-update pull requests. GitHub dependency graph, Dependabot alerts/security updates, private reporting and branch protection still need to be enabled and verified on the actual repository. CI permissions are read-only; update pull requests are not automatically merged or released.
+Dependabot is configured for weekly version-update pull requests. GitHub dependency graph, Dependabot alerts/security updates, private reporting and branch protection still need to be enabled and verified on the actual repository. Verification CI uses read-only permissions; the optional draft-release job alone receives contents-write permission. Update pull requests are not automatically merged or released.
 
-The manual release-candidate workflow resolves an existing version tag to an exact commit, runs the verification workflow on it, and creates a checksummed native candidate only after those jobs pass. Packaging verifies that the tag still points to the selected commit. It does not publish releases or images. Candidate metadata and SHA-256 checksums provide traceability and integrity checks, not a signature or a promise of security support.
+The manual release-candidate workflow resolves an existing version tag to an exact commit, runs the verification workflow on it, and creates a checksummed native candidate only after those jobs pass. Packaging verifies that the tag still points to the selected commit. An optional input creates a draft prerelease after verifying the downloaded candidate and remote tag again; it does not publish that draft or push images. Candidate metadata and SHA-256 checksums provide traceability and integrity checks, not a signature or a promise of security support.
 
 ## Deployment boundary
 
