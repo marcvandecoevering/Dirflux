@@ -11,9 +11,9 @@ Reference: droppy 12.2.0, commit `70b61d1ac7c2ce8045e07f4716b6a01abadf6296`, REA
 | `linkExtensions` | `LINK_EXTENSIONS`, false by default. Displays the current target's final extension, URI-encoded. The stored random ID stays unchanged. | Implemented; see checks below. |
 | `logLevel` | Startup/error logging only, no request/debug verbosity setting. | Not matched. |
 | `maxFileSize` | `MAX_UPLOAD_BYTES`; zero is unlimited. Default 10 GiB rather than unlimited. | Implemented and tested; default differs. |
-| `updateInterval` | Filesystem notifications use a fixed 150 ms debounce. | Configurable update throttling is not matched. |
+| `updateInterval` | `UPDATE_INTERVAL_MS`, default 1000 ms, zero sends immediately. Native and polling notifications share a coalescing window whose deadline is not reset by later changes. | Implemented; continuous polling and bounded event delivery tested. |
 | `pollingInterval` | `POLLING_INTERVAL_MS`, default 15 seconds, zero disables. Periodic invalidation/SSE refresh instead of recursively polling every file. | Equivalent refresh intent, different implementation/default; actual SMB/NFS evaluation pending. |
-| `keepAlive` | SSE comments provide heartbeat rather than WebSocket messages. | Configurable/disabled heartbeat is not matched. |
+| `keepAlive` | `KEEP_ALIVE_MS`, default 20000 ms, zero disables comments. SSE replaces WebSocket transport. Session validity checks remain independent, at most 20 seconds apart. | Configurable and disabled heartbeat tested; exact proxy needs remain deployment-specific. |
 | `uploadTimeout` | `UPLOAD_TIMEOUT_MS`, seven days by default. Receiving deadlines clean temporary uploads. | Implemented and tested. |
 | `allowFrame` | Same-origin frames are required for panes; unrelated origins are denied by CSP and X-Frame-Options. | External embedding opt-in is not implemented. |
 | `readOnly` | `READ_ONLY` plus account roles. | Implemented and tested. |

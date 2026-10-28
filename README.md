@@ -99,6 +99,8 @@ Environment variables are read from the process. To use `.env`, copy `.env.examp
 | `MAX_PUBLIC_SESSIONS` | `1000` | Maximum live guest sessions (1–1000000); existing sessions and account login remain available at capacity |
 | `PUBLIC_MODE` | `false` | Allow visitors without accounts; they can edit shared files unless `READ_ONLY=true` |
 | `WATCH` | `true` | Enable native recursive filesystem notifications |
+| `UPDATE_INTERVAL_MS` | `1000` | Coalesce change notifications over this interval; `0` sends immediately. Continuous changes do not reset the pending deadline |
+| `KEEP_ALIVE_MS` | `20000` | SSE keepalive interval; `0` disables heartbeat comments. Session validity is still checked at least every 20 seconds |
 | `IGNORE_PATTERNS` | `[]` | JSON array of root-relative glob patterns, for example `["**/*.tmp","**/.env","private"]` |
 | `POLLING_INTERVAL_MS` | `15000` | Periodically invalidate folder sizes and refresh connected clients; `0` disables this fallback |
 | `COOKIE_SECURE` | `false` | Require HTTPS for session cookies when `true` |

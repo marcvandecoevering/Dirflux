@@ -58,6 +58,8 @@ export async function createApp(options = {}) {
   const maxUpload = byteLimit(options.maxUpload ?? process.env.MAX_UPLOAD_BYTES ?? 10 * 1024 ** 3,'MAX_UPLOAD_BYTES',0);
   const maxText = byteLimit(options.maxText ?? process.env.MAX_TEXT_BYTES ?? 2 * 1024 ** 2,'MAX_TEXT_BYTES',1,64 * 1024 ** 2);
   const uploadTimeout = byteLimit(options.uploadTimeout ?? process.env.UPLOAD_TIMEOUT_MS ?? 604800000,'UPLOAD_TIMEOUT_MS',1,2147483647);
+  const updateInterval = byteLimit(options.updateInterval ?? process.env.UPDATE_INTERVAL_MS ?? 1000,'UPDATE_INTERVAL_MS',0,2147483647);
+  const keepAlive = byteLimit(options.keepAlive ?? process.env.KEEP_ALIVE_MS ?? 20000,'KEEP_ALIVE_MS',0,2147483647);
   let ignorePatterns = options.ignorePatterns;
   if (ignorePatterns === undefined) {
     try { ignorePatterns = JSON.parse(process.env.IGNORE_PATTERNS || '[]'); }
@@ -114,8 +116,9 @@ export async function createApp(options = {}) {
   const emitChange = () => { for (const client of eventClients) client.write('event: change\ndata: {}\n\n'); };
   const notifyChange = () => {
     sizeCache.clear();
-    clearTimeout(watchTimer);
-    watchTimer = setTimeout(emitChange, 150);
+    if(!updateInterval){emitChange();return;}
+    // Keep the first deadline: a continuously changing directory must still refresh.
+    if(!watchTimer)watchTimer=setTimeout(()=>{watchTimer=undefined;emitChange();},updateInterval);
   };
   let watcher;
   if (watchEnabled === true || watchEnabled === 'true') {
@@ -125,7 +128,7 @@ export async function createApp(options = {}) {
     } catch(error) { console.error('Filesystem watcher unavailable:', error.message); }
   }
   // Periodic invalidation also covers network mounts that do not deliver fs.watch events.
-  const pollTimer = pollingInterval ? setInterval(() => {sizeCache.clear();emitChange();}, pollingInterval) : undefined;
+  const pollTimer = pollingInterval ? setInterval(notifyChange, pollingInterval) : undefined;
   pollTimer?.unref();
   cleanupStartup = () => {watcher?.close();clearTimeout(watchTimer);clearInterval(pollTimer);for(const client of eventClients)client.end();};
   app.disable('x-powered-by');
@@ -330,11 +333,15 @@ export async function createApp(options = {}) {
   app.get('/api/events', (req, res) => {
     res.set({'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive','X-Accel-Buffering':'no'});
     res.flushHeaders();res.write('event: ready\ndata: {}\n\n');eventClients.add(res);
-    const heartbeat = setInterval(() => {
-      if (!db.prepare('SELECT id FROM sessions WHERE id=? AND expires>?').get(req.auth.session_id,Date.now())) {res.end();return;}
-      res.write(': heartbeat\n\n');
-    },20000);
-    res.on('close',()=>{clearInterval(heartbeat);eventClients.delete(res);});
+    const validSession=()=>{
+      if(closed||res.destroyed||res.writableEnded)return false;
+      if (!db.prepare('SELECT id FROM sessions WHERE id=? AND expires>?').get(req.auth.session_id,Date.now())) {res.end();return false;}
+      return true;
+    };
+    const heartbeat=keepAlive?setInterval(()=>{if(validSession())res.write(': heartbeat\n\n');},keepAlive):undefined;
+    // Disabling/slowing keepalive must not disable session expiry/revocation checks.
+    const sessionCheck=!keepAlive||keepAlive>20000?setInterval(validSession,20000):undefined;
+    res.on('close',()=>{clearInterval(heartbeat);clearInterval(sessionCheck);eventClients.delete(res);});
   });
   const admin = (req, _res, next) => next(req.auth.role !== 'admin' ? fail(403, 'Alleen voor beheerders.') : undefined);
   // Serialize filesystem commits. Receiving an upload must not lock out other users.
