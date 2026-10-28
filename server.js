@@ -47,12 +47,23 @@ export async function createApp(options = {}) {
   const certFile=options.tlsCertFile ?? process.env.TLS_CERT_FILE;
   const keyFile=options.tlsKeyFile ?? process.env.TLS_KEY_FILE;
   if(Boolean(certFile)!==Boolean(keyFile))throw new Error('TLS_CERT_FILE and TLS_KEY_FILE must both be configured.');
-  let tlsOptions;
-  if(certFile) {
-    tlsOptions={cert:await fsp.readFile(certFile),key:await fsp.readFile(keyFile),minVersion:'TLSv1.2'};
-    createSecureContext(tlsOptions); // Fail on invalid/mismatched credentials before opening storage.
+  const endpoints=options.listeners===undefined?[]:listenerSettings({LISTENERS:JSON.stringify(options.listeners)});
+  const tlsConfigurations=new Map(),privateKeys=new Set();
+  const tlsId=(cert,key)=>JSON.stringify([cert,key]);
+  async function loadTls(cert,key){
+    const id=tlsId(cert,key);
+    if(!tlsConfigurations.has(id)){
+      const configuration={cert:await fsp.readFile(cert),key:await fsp.readFile(key),minVersion:'TLSv1.2'};
+      createSecureContext(configuration); // Validate every listener before opening storage.
+      tlsConfigurations.set(id,configuration);privateKeys.add(key);
+    }
+    return tlsConfigurations.get(id);
   }
-  const secure=Boolean(tlsOptions)||secureCookie;
+  const tlsOptions=certFile?await loadTls(certFile,keyFile):undefined;
+  for(const endpoint of endpoints){
+    if(endpoint.certFile)await loadTls(endpoint.certFile,endpoint.keyFile);
+    else if(endpoint.protocol==='https'&&!tlsOptions)throw new Error('HTTPS listener requires certFile/keyFile or global TLS_CERT_FILE/TLS_KEY_FILE.');
+  }
   const guestUser={id:'public',name:'Bezoeker',role:'editor',guest:true};
   function byteLimit(value, name, minimum, maximum = Number.MAX_SAFE_INTEGER) {
     if (!['number','string'].includes(typeof value) || String(value).trim() === '') throw new Error(`${name} must be an integer between ${minimum} and ${maximum}.`);
@@ -90,8 +101,8 @@ export async function createApp(options = {}) {
   const realRoot = await fsp.realpath(root);
   const realConfig = await fsp.realpath(config);
   const comparable = p => process.platform === 'win32' ? p.toLowerCase() : p;
-  if(keyFile) {
-    const realKey=comparable(await fsp.realpath(keyFile));
+  for(const privateKey of privateKeys) {
+    const realKey=comparable(await fsp.realpath(privateKey));
     if(realKey===comparable(realRoot)||realKey.startsWith(comparable(realRoot)+path.sep))throw new Error('TLS_KEY_FILE must not be inside FILES_DIR.');
   }
   if (comparable(realRoot) === comparable(realConfig) || comparable(realConfig).startsWith(comparable(realRoot) + path.sep) || comparable(realRoot).startsWith(comparable(realConfig) + path.sep)) throw new Error('Bestanden en configuratie moeten gescheiden blijven, ook na het volgen van links.');
@@ -233,7 +244,7 @@ export async function createApp(options = {}) {
       throw fail(503,'Er zijn momenteel te veel openbare sessies. Probeer het later opnieuw of meld je aan met een account.');
     }
     db.prepare('INSERT INTO sessions VALUES (?,?,?,?)').run(hash(id), user.id, csrf, Date.now() + 7 * day);
-    res.cookie('droppy_session', id, { httpOnly: true, sameSite: 'strict', secure, ...(remember ? {maxAge:7*day} : {}), path: '/' });
+    res.cookie('droppy_session', id, { httpOnly: true, sameSite: 'strict', secure:secureCookie||Boolean(res.req.socket.encrypted), ...(remember ? {maxAge:7*day} : {}), path: '/' });
     return { user: publicUser(user), csrf, readOnly };
   }
   app.use((req, res, next) => {
@@ -691,7 +702,17 @@ export async function createApp(options = {}) {
     res.status(status).json({ error: mapped?.[1] || (duplicate ? 'Deze gebruikersnaam bestaat al.' : status === 500 ? 'Er ging iets mis op de server.' : error.message) });
   });
   const stopEvents = cleanupStartup;
-  const listen=(...args)=>(tlsOptions?createHttpsServer:createServer)({...tlsOptions,requestTimeout:Math.max(300000,uploadTimeout),headersTimeout:60000},app).listen(...args);
+  const listen=(...args)=>{
+    let configuration=tlsOptions;
+    if(args[0]&&typeof args[0]==='object'){
+      const {protocol,certFile:cert,keyFile:key,...address}=args[0];
+      if(protocol==='http')configuration=undefined;
+      else if(cert){configuration=tlsConfigurations.get(tlsId(cert,key));if(!configuration)throw new Error('Listener TLS files were not configured at application startup.');}
+      else if(protocol==='https'&&!configuration)throw new Error('HTTPS listener has no TLS configuration.');
+      args[0]=address;
+    }
+    return (configuration?createHttpsServer:createServer)({...configuration,requestTimeout:Math.max(300000,uploadTimeout),headersTimeout:60000},app).listen(...args);
+  };
   return { app, listen, logger, protocol:tlsOptions?'https':'http', stopEvents, close: () => {if(closed)return;closed=true;stopEvents();try{db.close();}finally{instanceLock.close();}}, root, config, setupTokenRequired: !countUsers() };
   } catch (error) {
     try { cleanupStartup(); database?.close(); } finally { instanceLock.close(); }
@@ -701,12 +722,12 @@ export async function createApp(options = {}) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const endpoints=listenerSettings();
-  const instance = await createApp();
+  const instance = await createApp({listeners:endpoints});
   if (instance.setupTokenRequired) instance.logger.info('setup.required',{message:'Enter the code from the setup-token file in CONFIG_DIR.'});
   let servers;
   try {servers=await startListeners(instance,endpoints);}
   catch(error){instance.close();throw error;}
-  for(const server of servers)instance.logger.info('server.listening',{protocol:instance.protocol,...(typeof server.address()==='string'?{path:server.address()}:{host:server.address().address,port:server.address().port})});
+  for(const [index,server] of servers.entries())instance.logger.info('server.listening',{protocol:endpoints[index].protocol||instance.protocol,...(typeof server.address()==='string'?{path:server.address()}:{host:server.address().address,port:server.address().port})});
   let stopping=false;
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, async () => {if(stopping)return;stopping=true;instance.stopEvents();await closeListeners(servers);instance.close();process.exit(0);});
 }
