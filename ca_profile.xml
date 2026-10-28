@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CommunityApplications>
+  <Profile>Dirflux is a self-hosted browser file manager. Source, installation instructions and support are available at https://github.com/marcvandecoevering/Dirflux. Use the project's private reporting channel for security issues.</Profile>
+  <Icon>https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/public/brand/dirflux-512.png</Icon>
+  <WebPage>https://github.com/marcvandecoevering/Dirflux</WebPage>
+</CommunityApplications>

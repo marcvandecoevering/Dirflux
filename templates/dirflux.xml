@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Container version="2">
+  <Name>Dirflux</Name>
+  <Repository>ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2</Repository>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <ExtraParams>--user=99:100 --read-only --cap-drop=ALL --security-opt=no-new-privileges --tmpfs=/tmp:rw,noexec,nosuid,size=64m</ExtraParams>
+  <WebUI>http://[IP]:[PORT:8094]/</WebUI>
+  <Icon>https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/public/brand/dirflux-512.png</Icon>
+  <Project>https://github.com/marcvandecoevering/Dirflux</Project>
+  <Support>https://github.com/marcvandecoevering/Dirflux/issues</Support>
+  <TemplateURL>https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/templates/dirflux.xml</TemplateURL>
+  <ReadMe>https://raw.githubusercontent.com/marcvandecoevering/Dirflux/main/README.md</ReadMe>
+  <Category>Tools:System</Category>
+  <License>BSD-2-Clause</License>
+  <Beta>true</Beta>
+  <Overview>Dirflux is a self-hosted file manager with two panes, uploads, previews, editing and share links. Development release. First setup requires the one-time code in /config/setup-token. Protect remote access with HTTPS.</Overview>
+  <Requires>Prepare separate files and config folders writable by UID 99/GID 100. No automatic recursive ownership changes are performed.</Requires>
+  <Config Name="Web interface" Target="8094" Default="8094" Mode="tcp" Description="HTTP port. Use an HTTPS proxy for remote access." Type="Port" Display="always" Required="true" Mask="false"/>
+  <Config Name="Files" Target="/files" Default="/mnt/user/dirflux" Mode="rw" Description="Only this folder is exposed through the file manager. Keep it outside Appdata." Type="Path" Display="always" Required="true" Mask="false"/>
+  <Config Name="Appdata" Target="/config" Default="/mnt/user/appdata/dirflux" Mode="rw" Description="Private accounts, sessions, settings and trash. Never place inside Files." Type="Path" Display="always" Required="true" Mask="false"/>
+  <Config Name="Read only" Target="READ_ONLY" Default="false" Mode="" Description="Set true to disable file mutations." Type="Variable" Display="advanced" Required="true" Mask="false"/>
+  <Config Name="Secure cookies" Target="COOKIE_SECURE" Default="false" Mode="" Description="Set true only when accessing through HTTPS." Type="Variable" Display="advanced" Required="true" Mask="false"/>
+</Container>

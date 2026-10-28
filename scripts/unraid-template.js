@@ -49,7 +49,7 @@ ${config('Secure cookies','COOKIE_SECURE','false','Variable','','Set true only w
 `;
   const profile=`<?xml version="1.0" encoding="UTF-8"?>
 <CommunityApplications>
-  <Profile>${xml(name)} development releases. Source, installation instructions and support are available at ${xml(source)}. Report security issues privately through GitHub once private reporting is enabled.</Profile>
+  <Profile>${xml(name)} is a self-hosted browser file manager. Source, installation instructions and support are available at ${xml(source)}. Use the project's private reporting channel for security issues.</Profile>
   <Icon>${xml(icon)}</Icon>
   <WebPage>${xml(source)}</WebPage>
 </CommunityApplications>
