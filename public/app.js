@@ -197,17 +197,23 @@ async function togglePaneFullscreen(index) {
 document.addEventListener('fullscreenchange',()=>{
   if(nativeFullscreenPane&&document.fullscreenElement!==nativeFullscreenPane){nativeFullscreenPane.classList.remove('is-fullscreen');nativeFullscreenPane=null;}
 });
-async function navigate(index, path) {
+async function navigate(index, path, openItem=null) {
   return changeView(async () => {
   const pane = state.panes[index];
   const frame=$(`[data-pane="${index}"] iframe`);
   if(frame && await frame.contentWindow.confirmCloseView?.()===false)return;
   if(frame)freezeApprovedFrame(frame);
   await leavePaneFullscreen($(`[data-pane="${index}"]`));
-  if(frame)frame.remove();pane.open=null;
+  if(frame)frame.remove();pane.open=openItem&&!isAudio(openItem)?{item:openItem,forceText:false}:null;
   pane.path = path; pane.query = ''; pane.selected.clear();
   setActive(index); $('#search').value = ''; await loadPane(index);recordLocation();
+  if(openItem&&isAudio(openItem))playAudio(openItem,index);
   });
+}
+async function openDroppedItem(raw,index) {
+  const source=readInternalDrop(raw);
+  const item=await api('/stat?path='+encodeURIComponent(source.path));
+  return navigate(index,item.directory?item.path:parent(item.path),item.directory?null:item);
 }
 function recordLocation(replace=false) {
   if(viewerMode)return;
@@ -307,10 +313,11 @@ function renderPane(index) {
     e.preventDefault(); el.classList.remove('drop-target'); setActive(index); if (!canWrite()) return;
     const internal=e.dataTransfer.getData('application/x-droppy-path');
     if(internal){
+      if(pane.open)return openDroppedItem(internal,index);
       const item=readInternalDrop(internal),destination=pane.path,operation=dropOperation(e,item.operation);
       const perform=async operation=>{const body=dropTransfer(item,destination,operation);if(body)await api('/transfer',{method:'POST',body});};
       if(operation){await perform(operation);await refreshAll();return;}
-      return formDialog('Verplaatsen of kopiëren', '<label>Bewerking<select name="operation"><option value="move">Verplaatsen</option><option value="copy">Kopiëren</option></select></label>', 'Toepassen',async form=>perform(form.get('operation')),item.name+' → /'+destination);
+      return formDialog('Verplaatsen, kopiëren of openen', '<label>Bewerking<select name="operation"><option value="move">Verplaatsen</option><option value="copy">Kopiëren</option><option value="open">Openen</option></select></label>', 'Toepassen',async form=>form.get('operation')==='open'?openDroppedItem(internal,index):perform(form.get('operation')),item.name+' → /'+destination);
     }
     const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
     const destination=pane.path;
@@ -714,11 +721,21 @@ on(document, 'paste', async e => {
     if (text) await formDialog('Tekst opslaan als bestand', '<label>Bestandsnaam<input name="name" value="geplakte-tekst.txt" required></label>', 'Opslaan', async form => { const file = new File([text], form.get('name'), { type:'text/plain' }); await upload([{ file, path:file.name }], active().path); });
   }
 });
+if(viewerMode){
+  document.addEventListener('dragover',e=>{if([...e.dataTransfer.types].includes('application/x-droppy-path'))e.preventDefault();});
+  document.addEventListener('drop',e=>{
+    const raw=e.dataTransfer.getData('application/x-droppy-path');
+    if(!raw)return;
+    e.preventDefault();e.stopPropagation();
+    window.parent.postMessage({type:'droppy-drop-open',raw},location.origin);
+  });
+}
 window.addEventListener('message',async e=>{
-  if(e.origin!==location.origin||!['droppy-close','droppy-fullscreen'].includes(e.data?.type))return;
+  if(e.origin!==location.origin||!['droppy-close','droppy-fullscreen','droppy-drop-open'].includes(e.data?.type))return;
   const index=state.panes.findIndex((p,i)=>$(`[data-pane="${i}"] iframe`)?.contentWindow===e.source);
   if(index<0)return;
   try {
+    if(e.data.type==='droppy-drop-open'){await openDroppedItem(e.data.raw,index);return;}
     if(e.data.type==='droppy-fullscreen'){await togglePaneFullscreen(index);return;}
     await leavePaneFullscreen($(`[data-pane="${index}"]`));
     $(`[data-pane="${index}"] iframe`)?.remove();state.panes[index].open=null;
