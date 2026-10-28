@@ -1,3 +1,4 @@
+import {createAttemptLimiter} from './lib/rate-limit.js';
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
@@ -117,7 +118,7 @@ export async function createApp(options = {}) {
   const pollTimer = pollingInterval ? setInterval(() => {sizeCache.clear();emitChange();}, pollingInterval) : undefined;
   pollTimer?.unref();
   app.disable('x-powered-by');
-  const attempts = new Map();
+  const attempts = createAttemptLimiter();
   const publicUser = u => ({ id: u.id, name: u.name, role: u.role, ...(u.guest?{guest:true}:{}) });
   const countUsers = () => db.prepare('SELECT count(*) AS n FROM users').get().n;
   const setupTokenPath = path.join(config,'setup-token');
@@ -245,12 +246,12 @@ export async function createApp(options = {}) {
     const auth=req.query.login==='1'&&req.auth?.guest?null:req.auth;
     res.json({ setup: !auth&&countUsers() === 0, setupTokenRequired: !auth&&countUsers() === 0, user: auth ? publicUser(auth) : null, csrf:auth?.csrf, readOnly,publicMode });
   });
-  const throttle = (req, _res, next) => {
-    const key = req.socket.remoteAddress;
-    if (attempts.size > 1000) for (const [k, v] of attempts) if (v.until < Date.now()) attempts.delete(k);
-    let v = attempts.get(key);
-    if (!v || v.until < Date.now()) { v = { n: 0, until: Date.now() + 15 * 60000 }; attempts.set(key, v); }
-    if (++v.n > 15) return next(fail(429, 'Te veel pogingen. Probeer over 15 minuten opnieuw.'));
+  const throttle = (req, res, next) => {
+    const result=attempts.consume(req.socket.remoteAddress);
+    if(!result.allowed) {
+      res.set('Retry-After',String(result.retryAfter));
+      return next(fail(429,'Te veel pogingen. Probeer het later opnieuw.'));
+    }
     next();
   };
   app.post('/api/setup', throttle, async (req, res) => {
@@ -276,7 +277,7 @@ export async function createApp(options = {}) {
     const digest = await scrypt(password, user?.salt || 'unknown-user', 64);
     const currentUser = user && db.prepare('SELECT * FROM users WHERE id=?').get(user.id);
     if (!user || !crypto.timingSafeEqual(digest, Buffer.from(user.digest, 'hex')) || currentUser?.digest !== user.digest) throw fail(401, 'Gebruikersnaam of wachtwoord klopt niet.');
-    attempts.delete(req.socket.remoteAddress);
+    attempts.clear(req.socket.remoteAddress);
     res.json(session(res, currentUser, req.body.remember !== false));
   });
   app.get('/s/:id', async (req, res) => {
