@@ -25,8 +25,11 @@ async function login(route='/api/login'){
 }
 try {
   for(const volume of volumes)docker('volume','create',volume);
+  // Match Unraid's pre-created nobody:users appdata while Files remains root-owned.
+  docker('run','--rm',...mounts,'--entrypoint','sh',image,'-c','chown 99:100 /config && chmod 755 /config');
   // Docker creates root-owned mount directories; no host mkdir/chown preparation.
   await start(image,[...caps,'-e','INITIAL_ADMIN_PASSWORD='+password]);await login();
+  assert.equal(docker('exec',name,'stat','-c','%u:%g:%a','/config'),'99:100:700');
   const r=await fetch(base+'/api/upload?path=persist.txt',{method:'PUT',headers:{Cookie:cookie,'X-CSRF-Token':csrf},body:'upgrade fixture'});assert.equal(r.status,201,await r.text());
   assert.equal(docker('exec',name,'stat','-c','%u:%g','/files/persist.txt'),'99:100');
   const status=docker('exec',name,'node','-e',String.raw`const fs=require('fs');for(const p of fs.readdirSync('/proc').filter(p=>/^\d+$/.test(p))){try{const a=fs.readFileSync('/proc/'+p+'/cmdline','utf8').split('\0');if(a[1]==='server.js')console.log(fs.readFileSync('/proc/'+p+'/status','utf8'));}catch{}}`);
