@@ -162,13 +162,10 @@ export async function createApp(options = {}) {
         if (!item.isSymbolicLink() && !item.name.startsWith('.app-tmp-')) yield* walkEntries([rel, item.name].filter(Boolean).join('/'),rejectIgnored,check);
       }
   }
-  async function walk(relative, limit = 25000, rejectIgnored = false) {
-    const result = [];
-    for await(const item of walkEntries(relative,rejectIgnored)) {
-      if(result.length>=limit)throw fail(413,`Meer dan ${limit} items; kies een kleinere map.`);
-      result.push(item);
-    }
-    return result;
+  async function directorySize(relative) {
+    let bytes=0;
+    for await(const item of walkEntries(relative))if(!item.directory)bytes+=item.size;
+    return bytes;
   }
   async function addUser(name, password, role) {
     if (typeof name !== 'string' || !/^[\p{L}\p{N}_.@ -]{1,64}$/u.test(name.trim())) throw fail(400, 'Kies een gebruikersnaam van 1–64 tekens.');
@@ -351,7 +348,7 @@ export async function createApp(options = {}) {
         const itemPath = [relative, entry.name].filter(Boolean).join('/');
         let itemSize = st.size;
         if (st.isDirectory()) {
-          if(!sizeCache.has(itemPath))sizeCache.set(itemPath,walk(itemPath).then(items=>items.filter(i=>!i.directory).reduce((n,i)=>n+i.size,0)).catch(()=>null));
+          if(!sizeCache.has(itemPath))sizeCache.set(itemPath,directorySize(itemPath).catch(()=>null));
           itemSize=await sizeCache.get(itemPath);
         }
         items.push({ name: entry.name, path: itemPath, directory: st.isDirectory(), size: itemSize, modified: st.mtimeMs });
@@ -398,7 +395,7 @@ export async function createApp(options = {}) {
     res.type('application/pdf').set('Content-Disposition', 'attachment').sendFile(absolute, {dotfiles:'allow'});
   });
   async function zip(relative, res, guard = () => {}) {
-    const items = await walk(relative);
+    await resolve(relative);
     if(res.destroyed)return;
     guard();
     const archive = new ZipArchive({ zlib: { level: 5 } });
@@ -408,11 +405,21 @@ export async function createApp(options = {}) {
     archive.on('warning', error => res.destroy(error));
     res.on('close', () => { if (!res.writableEnded) {archive.abort();for(const stream of streams)stream.destroy();} });
     archive.pipe(res);
+    const appendEntry=(source,metadata)=>new Promise((resolve,reject)=>{
+      const cleanup=()=>{archive.off('entry',done);archive.off('error',failed);archive.off('warning',failed);res.off('close',cancelled);};
+      const done=()=>{cleanup();resolve();};
+      const failed=error=>{cleanup();reject(error);};
+      const cancelled=()=>failed(fail(499,'Download geannuleerd.'));
+      if(res.destroyed)return cancelled();
+      archive.once('entry',done);archive.once('error',failed);archive.once('warning',failed);res.once('close',cancelled);
+      try {archive.append(source,metadata);} catch(error) {failed(error);}
+    });
     const base = relative ? path.posix.dirname(relative) : '';
-    for (const item of items) {
+    try {
+    for await(const item of walkEntries(relative,false,()=>{if(res.destroyed)throw fail(499,'Download geannuleerd.');guard();})) {
       const name = base && base !== '.' ? item.path.slice(base.length + 1) : item.path;
       if (!name) continue;
-      if (item.directory) archive.append('', { name: name + '/' });
+      if (item.directory) await appendEntry('', { name: name + '/' });
       else {
         const stream=Readable.from((async function* () {
         const checked=await resolve(item.path);
@@ -425,10 +432,11 @@ export async function createApp(options = {}) {
         streams.add(stream);
         stream.once('close',()=>streams.delete(stream));
         stream.on('error',error=>{archive.abort();res.destroy(error);for(const other of streams)other.destroy();});
-        archive.append(stream,{name,date:new Date(item.modified)});
+        await appendEntry(stream,{name,date:new Date(item.modified)});
       }
     }
     await archive.finalize();
+    } catch(error) {archive.abort();for(const stream of streams)stream.destroy();res.destroy(error);}
   }
   app.get('/api/zip', async (req, res) => { const { relative } = await resolve(req.query.path || ''); await zip(relative, res); });
   app.get('/api/text', async (req, res) => {
@@ -530,8 +538,7 @@ export async function createApp(options = {}) {
     if (!['reject','rename'].includes(req.body.conflict || 'reject')) throw fail(400, 'Onbekende keuze bij naamconflict.');
     if (req.body.conflict === 'rename') target=await availablePath(target.relative,(await fsp.stat(source.absolute)).isDirectory());
     await absent(target.absolute);
-    const descendants=await walk(source.relative,25000,true);
-    for (const item of descendants) if (ignored(target.relative+item.path.slice(source.relative.length))) throw fail(403, 'De doelmap zou uitgesloten bestanden bevatten.');
+    for await(const item of walkEntries(source.relative,true)) if (ignored(target.relative+item.path.slice(source.relative.length))) throw fail(403, 'De doelmap zou uitgesloten bestanden bevatten.');
     if (req.body.operation === 'copy') await fsp.cp(source.absolute, target.absolute, { recursive: true, force: false, errorOnExist: true, filter: async p => !(await fsp.lstat(p)).isSymbolicLink() });
     else await moves.move(source,target);
     res.json({ ok: true, path:target.relative });
@@ -542,7 +549,7 @@ export async function createApp(options = {}) {
   write.post('/api/trash', writable, async (req, res) => {
     const { relative, absolute } = await resolve(req.body.path);
     if (!relative) throw fail(400, 'De hoofdmap kan niet worden verwijderd.');
-    if (ignoreMatchers.length) await walk(relative,25000,true);
+    if (ignoreMatchers.length) for await(const _item of walkEntries(relative,true)) { /* Validate every descendant before deleting a parent. */ }
     const id = crypto.randomUUID(), destination = path.join(trashDir, id);
     try { await fsp.rename(absolute, destination); }
     catch (e) {
