@@ -72,6 +72,7 @@ function on(element, event, action) {
   element.addEventListener(event, async e => { try { await action(e); } catch (error) { toast(error.message, true); } });
 }
 async function closeDialog() {
+  if (viewerMode && window.parent.viewTransitionPending?.()) return;
   if (closeHook && !await closeHook()) return;
   videoPlayback?.destroy(); videoPlayback=null; imageViewer?.destroy(); imageViewer=null;
   editorInstance?.destroy(); editorInstance=null; currentMedia=null;
@@ -100,9 +101,28 @@ function confirmDiscardChanges() {
   return discardPrompt;
 }
 window.confirmCloseView = confirmDiscardChanges;
+let viewTransitionBusy = false;
+let transitionFrames = [];
+window.viewTransitionPending = () => viewTransitionBusy;
+function freezeApprovedFrame(frame) {
+  transitionFrames.push({ frame, inert: frame.inert }); frame.inert = true;
+}
+async function changeView(action) {
+  if (viewTransitionBusy) return;
+  viewTransitionBusy = true;
+  try { return await action(); }
+  finally {
+    for (const { frame, inert } of transitionFrames) frame.inert = inert;
+    transitionFrames = []; viewTransitionBusy = false;
+  }
+}
 async function confirmCloseFrames() {
   for (const frame of $$('.file-view')) {
     if (await frame.contentWindow.confirmCloseView?.() === false) return false;
+    // Hold approved panes until the entire transition finishes. Cancellation
+    // restores every editor without clearing dirty or allowing later edits
+    // to inherit an earlier discard approval.
+    freezeApprovedFrame(frame);
   }
   return true;
 }
@@ -176,13 +196,16 @@ document.addEventListener('fullscreenchange',()=>{
   if(nativeFullscreenPane&&document.fullscreenElement!==nativeFullscreenPane){nativeFullscreenPane.classList.remove('is-fullscreen');nativeFullscreenPane=null;}
 });
 async function navigate(index, path) {
+  return changeView(async () => {
   const pane = state.panes[index];
   const frame=$(`[data-pane="${index}"] iframe`);
   if(frame && await frame.contentWindow.confirmCloseView?.()===false)return;
+  if(frame)freezeApprovedFrame(frame);
   await leavePaneFullscreen($(`[data-pane="${index}"]`));
   if(frame)frame.remove();pane.open=null;
   pane.path = path; pane.query = ''; pane.selected.clear();
   setActive(index); $('#search').value = ''; await loadPane(index);recordLocation();
+  });
 }
 function recordLocation(replace=false) {
   if(viewerMode)return;
@@ -191,13 +214,18 @@ function recordLocation(replace=false) {
 }
 async function restoreLocation() {
   if(viewerMode||!state.user||!location.hash)return;
+  if(viewTransitionBusy){recordLocation(true);return;}
+  return changeView(async () => {
+  const requestedHash = location.hash;
   if(!await confirmCloseFrames()){recordLocation(true);return;}
-  const paths=location.hash.replace(/^#\/?/,'').split('|').slice(0,2).map(decodeURIComponent),panes=[];
+  const paths=requestedHash.replace(/^#\/?/,'').split('|').slice(0,2).map(decodeURIComponent),panes=[];
   for(const locationPath of paths){
     try{const item=await api('/stat?path='+encodeURIComponent(locationPath));panes.push({path:item.directory?item.path:parent(item.path),open:item.directory?null:{item,forceText:false},items:[],selected:new Set(),sort:'name'});}
     catch(error){toast(error.message,true);panes.push({path:'',items:[],selected:new Set(),sort:'name'});}
   }
   state.panes=panes;state.active=0;$('#panes').replaceChildren();renderPanes();await refreshAll();
+  recordLocation(true);
+  });
 }
 function renderPanes() {
   $('#panes').classList.toggle('split', state.panes.length === 2);
@@ -620,7 +648,7 @@ on($('#login-form'), 'submit', async e => {
   catch (error) { $('#auth-error').textContent = error.message; }
   finally { $('#login-button').disabled = false; }
 });
-on($('#logout'), 'click', async () => { if(!await confirmCloseFrames())return; const wasGuest=state.user?.guest; for(const pane of $$('.pane.is-fullscreen'))await leavePaneFullscreen(pane); await api('/logout', { method:'POST' }); if(wasGuest){location.href='/?login=1';return;} state.user = null; state.panes = [{ path:'', items:[], selected:new Set(), sort:'name' }]; state.active = 0; await init(); });
+on($('#logout'), 'click', () => changeView(async () => { if(!await confirmCloseFrames())return; const wasGuest=state.user?.guest; for(const pane of $$('.pane.is-fullscreen'))await leavePaneFullscreen(pane); await api('/logout', { method:'POST' }); $('#panes').replaceChildren(); if(wasGuest){location.href='/?login=1';return;} state.user = null; state.panes = [{ path:'', items:[], selected:new Set(), sort:'name' }]; state.active = 0; await init(); }));
 on($('#refresh'), 'click', () => refreshAll());
 on($('#new-folder'), 'click', () => create(true)); on($('#new-file'), 'click', () => create(false));
 $('#upload-button').onclick = () => $('#file-input').click(); $('#upload-folder').onclick = () => $('#folder-input').click();
@@ -628,12 +656,12 @@ for (const id of ['#file-input','#folder-input']) {
   on($(id),'click',e=>{e.target.dataset.destination=active().path;});
   on($(id), 'change', async e => { const files = [...e.target.files].map(file => ({ file, path:file.webkitRelativePath || file.name })); const destination=e.target.dataset.destination??active().path; e.target.value = ''; await upload(files, destination); });
 }
-on($('#split'), 'click', async () => {
+on($('#split'), 'click', () => changeView(async () => {
   if (state.panes.length === 2) {const frame=$('[data-pane="1"] iframe');if(frame&&await frame.contentWindow.confirmCloseView?.()===false)return;state.panes = [state.panes[0]]; state.active = 0; }
   else state.panes.push({ path:active().path, items:[], selected:new Set(), sort:'name' });
   $('#split').setAttribute('aria-pressed', String(state.panes.length === 2)); renderPanes(); await refreshAll();recordLocation();
   if(!eventSource){eventSource=new EventSource('/api/events');eventSource.addEventListener('change',()=>{if(!$('#dialog').open&&!state.uploading)refreshAll(true);});}
-});
+}));
 on($('#search-form'), 'submit', async e => { e.preventDefault(); const q = $('#search').value.trim(); active().query = q; active().selected.clear(); await loadPane(state.active); });
 on($('#search'), 'search', async () => { if (!$('#search').value) { active().query = ''; await loadPane(state.active); } });
 $$('[data-batch]').forEach(button => on(button, 'click', async () => {
