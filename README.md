@@ -104,6 +104,8 @@ For an HTTPS reverse proxy, enable `COOKIE_SECURE=true` and preserve the origina
 
 Upload deadlines close the connection and discard the incomplete temporary file; retry the upload after a timeout. Receiving uploads does not block other file operations. Publication is serialized and rechecks session validity and destination conflicts before changing a file. The HTTP listener allows the configured upload duration while retaining a separate 60-second header timeout. Proxy timeouts can still end transfers earlier.
 
+Folder drag-and-drop includes empty directories when the browser exposes directory entries. The legacy folder selection input supplies only files, so empty folders are not represented by that picker. Existing destination folders are merged; a file blocking an incoming directory produces an error and is never overwritten automatically.
+
 ## Security boundaries and remaining limits
 
 - Passwords use salted scrypt. Session cookies are HttpOnly and SameSite=Strict; sessions expire after seven days. Mutations require a CSRF token and check browser Origin when present.

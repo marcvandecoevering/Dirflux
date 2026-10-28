@@ -207,17 +207,10 @@ function renderPane(index) {
     const internal=e.dataTransfer.getData('application/x-droppy-path');
     if(internal){const item=JSON.parse(internal);return formDialog('Move or copy', '<label>Operation<select name="operation"><option value="move">Move</option><option value="copy">Copy</option></select></label>', 'Apply',async form=>{await api('/transfer',{method:'POST',body:{source:item.path,target:join(pane.path,item.name),operation:form.get('operation'),conflict:'rename'}});},item.name+' → /'+pane.path);}
     const entries = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
-    const files = [];
-    async function collect(entry, prefix = '') {
-      if (entry.isFile) { const f = await new Promise((resolve, reject) => entry.file(resolve, reject)); files.push({ file: f, path: prefix + f.name }); }
-      else if (entry.isDirectory) {
-        const reader = entry.createReader();
-        while (true) { const children = await new Promise((resolve, reject) => reader.readEntries(resolve, reject)); if (!children.length) break; for (const child of children) await collect(child, prefix + entry.name + '/'); }
-      }
-    }
-    if (entries.length) for (const entry of entries) await collect(entry);
-    else for (const file of e.dataTransfer.files) files.push({ file, path: file.name });
-    await upload(files, pane.path);
+    const destination=pane.path;
+    const fallback=[...e.dataTransfer.files].map(file=>({file,path:file.name}));
+    const {collectUploadEntries}=await import('/upload-entries.js');
+    await upload(entries.length?await collectUploadEntries(entries):fallback, destination);
   });
   if(pane.open){
     const frame=document.createElement('iframe');frame.className='file-view';frame.title=pane.open.item.name;
@@ -416,11 +409,16 @@ async function upload(files, destination) {
   state.uploading = true; uploadCancelled = false; $('#uploads').hidden = false; $('#cancel-upload').hidden = false;
   const errors = []; let completed = 0;
   for (let i = 0; i < files.length && !uploadCancelled; i++) {
-    const { file, path } = files[i];
+    const { file, path, directory } = files[i];
     $('#upload-title').textContent = `Upload ${i+1} van ${files.length}`; $('#upload-detail').textContent = path; $('#upload-progress').value = 0;
     try {
       const target = join(destination,path);
       const existing = await api('/upload-target?path=' + encodeURIComponent(target));
+      if(directory) {
+        if(existing.exists&&!existing.directory)throw new Error('Een bestand blokkeert deze map. Hernoem het bestand of de uploadmap.');
+        if(!existing.exists)await api('/create',{method:'POST',body:{path:target,directory:true}});
+        completed++;continue;
+      }
       const conflict = existing.exists ? await chooseUploadConflict(path,existing.directory) : 'reject';
       if (conflict === 'skip' || uploadCancelled) continue;
       const query = new URLSearchParams({path:target,conflict});
@@ -435,7 +433,7 @@ async function upload(files, destination) {
   }
   state.uploading = false; uploadRequest = null; $('#uploads').hidden = true;
   await refreshAll();
-  toast(`${completed} van ${files.length} bestand(en) geüpload.${uploadCancelled ? ' Upload geannuleerd.' : ''}`, errors.length > 0);
+  toast(`${completed} van ${files.length} bestand(en)/map(pen) verwerkt.${uploadCancelled ? ' Upload geannuleerd.' : ''}`, errors.length > 0);
   if (errors.length) showDialog('Niet alle bestanden zijn geüpload', `<p>Succesvol geüploade bestanden blijven bewaard. Bestanden worden alleen vervangen als je daarvoor kiest.</p><div class="dialog-error">${escape(errors.join('\n'))}</div>`);
 }
 async function init() {
@@ -478,7 +476,10 @@ on($('#logout'), 'click', async () => { if($$('.file-view').some(f=>f.contentWin
 on($('#refresh'), 'click', () => refreshAll());
 on($('#new-folder'), 'click', () => create(true)); on($('#new-file'), 'click', () => create(false));
 $('#upload-button').onclick = () => $('#file-input').click(); $('#upload-folder').onclick = () => $('#folder-input').click();
-for (const id of ['#file-input','#folder-input']) on($(id), 'change', async e => { const files = [...e.target.files].map(file => ({ file, path:file.webkitRelativePath || file.name })); e.target.value = ''; await upload(files, active().path); });
+for (const id of ['#file-input','#folder-input']) {
+  on($(id),'click',e=>{e.target.dataset.destination=active().path;});
+  on($(id), 'change', async e => { const files = [...e.target.files].map(file => ({ file, path:file.webkitRelativePath || file.name })); const destination=e.target.dataset.destination??active().path; e.target.value = ''; await upload(files, destination); });
+}
 $('#cancel-upload').onclick = () => { uploadCancelled = true; uploadRequest?.abort(); };
 on($('#split'), 'click', async () => {
   if (state.panes.length === 2) {const frame=$('[data-pane="1"] iframe');if(frame&&frame.contentWindow.confirmCloseView?.()===false)return;state.panes = [state.panes[0]]; state.active = 0; }
