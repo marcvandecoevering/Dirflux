@@ -3,9 +3,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing version tag, such as v0.1.0
+        description: Version tag, such as v0.1.0
         required: true
         type: string
+      create_tag:
+        description: Create a new version tag at the selected workflow revision
+        required: false
+        default: false
+        type: boolean
       create_draft:
         description: Create a GitHub draft release after verification (does not publish)
         required: false
@@ -34,12 +39,14 @@ concurrency:
 jobs:
   resolve:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     outputs:
       revision: ${{ steps.source.outputs.revision }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.create_tag && github.sha || inputs.tag }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -49,6 +56,8 @@ jobs:
         name: Require a matching existing version tag
         env:
           RELEASE_TAG: ${{ inputs.tag }}
+          CREATE_TAG: ${{ inputs.create_tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
@@ -58,6 +67,10 @@ jobs:
           if(!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(tag)||tag!=='v'+manifest.version)throw new Error('Tag/version mismatch');
           const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();
           const revision=git('rev-parse','HEAD');
+          if(process.env.CREATE_TAG==='true') {
+            execFileSync('gh',['api',`repos/${process.env.GITHUB_REPOSITORY}/git/refs`,'--method','POST','-f',`ref=refs/tags/${tag}`,'-f',`sha=${revision}`],{stdio:'pipe'});
+            git('fetch','origin',`refs/tags/${tag}:refs/tags/${tag}`);
+          }
           if(git('rev-parse',`refs/tags/${tag}^{commit}`)!==revision)throw new Error('Not the requested tag');
           fs.appendFileSync(process.env.GITHUB_OUTPUT,`revision=${revision}\n`);
           NODE

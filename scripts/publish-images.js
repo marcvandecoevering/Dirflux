@@ -11,6 +11,7 @@ const command=(name,...args)=>execFileSync(name,args,{encoding:'utf8',timeout:60
 const gh=(...args)=>command('gh',...args);
 const docker=(...args)=>command('docker',...args);
 const manifest=JSON.parse(await fs.readFile('package.json','utf8'));
+if(process.env.PUBLISH_LATEST==='true'&&process.env.PUBLISH_BETA==='true')throw new Error('Choose one release channel.');
 if(process.env.PUBLISH_LATEST==='true'&&!/^\d+\.\d+\.\d+$/.test(manifest.version))throw new Error('Only stable versions can advance latest.');
 if(tag!=='v'+manifest.version||command('git','rev-parse','HEAD')!==revision)throw new Error('Release source/version mismatch.');
 let remote=JSON.parse(gh('api',`repos/${repository}/git/ref/tags/${tag}`)).object;
