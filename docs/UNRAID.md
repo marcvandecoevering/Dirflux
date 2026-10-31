@@ -12,7 +12,7 @@ New empty storage folders are prepared automatically. No XML download, console c
 2. In **Repository**, paste this complete image address:
 
    ```text
-   ghcr.io/marcvandecoevering/dirflux:beta
+   ghcr.io/marcvandecoevering/dirflux:latest
    ```
 
    This is the published Docker image in GitHub Container Registry (GHCR). The GitHub source repository URL (`https://github.com/marcvandecoevering/Dirflux`) does not go in this field. The image is public; no GitHub login, repository clone or manual download is required.
@@ -58,9 +58,9 @@ The initial password creates an account only on a new installation. Changing tha
 
 **Upgrading from beta.10 or earlier to beta.11 or newer:** the internal container port changes from `8094` to `8080`. Edit the container's Web interface port entry and set **Container Port** to `8080`; keep your existing **Host Port** (for example `8093` or `8094`). If Unraid does not let you edit the container port, remove that port entry and add it again with the same host port and container port `8080`. Set **WebUI** in Advanced View to `http://[IP]:[PORT:8080]/`. Remove an old explicit `PORT=8094` variable or change it to `8080`; custom `LISTENERS` also override the default. Apply the settings and update the image. Your browser URL and tunnel destination stay the same when the host port is unchanged. Installing a new image alone does not change a saved Unraid port mapping.
 
-Use Unraid's normal **Check for Updates → Update** with the `beta` image tag. Back up both storage folders before updating. The beta channel advances only after release verification; versioned tags remain available for controlled deployments and rollback with matching backups.
+Use Unraid's normal **Check for Updates → Update** with the `latest` image tag. Back up both storage folders before updating. The stable channel advances only after release verification; versioned tags remain available for controlled deployments and rollback with matching backups.
 
-For an existing beta.2 installation, change **Repository** once from `ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2` to `ghcr.io/marcvandecoevering/dirflux:beta` and apply. Keep both storage paths. Your account and password stay valid; no initial-password variable is required for an existing account. Existing `--user=99:100` settings remain supported for already prepared folders.
+For an existing beta.2 installation, change **Repository** once from `ghcr.io/marcvandecoevering/dirflux:0.1.0-beta.2` to `ghcr.io/marcvandecoevering/dirflux:latest` and apply. Keep both storage paths. Your account and password stay valid; no initial-password variable is required for an existing account. Existing `--user=99:100` settings remain supported for already prepared folders.
 
 ## Optional settings
 
@@ -69,3 +69,5 @@ For an existing beta.2 installation, change **Repository** once from `ghcr.io/ma
 - All accounts share the files mounted at `/files`.
 
 [Configuration](OPERATIONS.md) · [Releases](https://github.com/marcvandecoevering/Dirflux/releases) · [Support](https://github.com/marcvandecoevering/Dirflux/issues)
+
+From stable 0.1.0, use `ghcr.io/marcvandecoevering/dirflux:latest`. Existing `:beta` installations continue receiving the same verified stable images through a compatibility alias; changing the Repository to `:latest` is recommended. Storage and accounts are preserved.

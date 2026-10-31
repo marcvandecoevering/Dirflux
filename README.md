@@ -6,7 +6,7 @@
 
 Your files, in your browser, on your own server. Browse two folders side by side, upload, edit text, preview images/PDFs/media, share links and recover deleted files.
 
-**Beta:** [Releases](https://github.com/marcvandecoevering/Dirflux/releases) · [Support](https://github.com/marcvandecoevering/Dirflux/issues)
+**Stable:** [Releases](https://github.com/marcvandecoevering/Dirflux/releases) · [Support](https://github.com/marcvandecoevering/Dirflux/issues)
 
 ## Get started
 
@@ -23,7 +23,7 @@ Start with an empty template and fill in these fields:
 | Field | Enter |
 | --- | --- |
 | Name | `Dirflux` |
-| Repository | `ghcr.io/marcvandecoevering/dirflux:beta` |
+| Repository | `ghcr.io/marcvandecoevering/dirflux:latest` |
 | Network Type | `Bridge` |
 | Privileged | `Off` |
 | WebUI (Advanced View) | `http://[IP]:[PORT:8080]/` |
@@ -58,7 +58,7 @@ npm start
 
 Open `http://127.0.0.1:8080`. Read `data/config/setup-token` to create your administrator account. There is no default password.
 
-**Docker:** install [`ghcr.io/marcvandecoevering/dirflux:beta`](docs/OPERATIONS.md#install-the-docker-image) (AMD64 / ARM64). Persist `/files` and `/config` separately. Use HTTPS for remote access.
+**Docker:** install [`ghcr.io/marcvandecoevering/dirflux:latest`](docs/OPERATIONS.md#install-the-docker-image) (AMD64 / ARM64). Persist `/files` and `/config` separately. Use HTTPS for remote access.
 
 ## Technology and security
 

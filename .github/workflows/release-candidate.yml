@@ -3,16 +3,21 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing version tag, such as v0.1.0-beta.1
+        description: Existing version tag, such as v0.1.0
         required: true
         type: string
       create_draft:
-        description: Create a GitHub draft prerelease after verification (does not publish)
+        description: Create a GitHub draft release after verification (does not publish)
         required: false
         default: false
         type: boolean
       publish_images:
         description: Publish the exact verified AMD64 and ARM64 images to GHCR
+        required: false
+        default: false
+        type: boolean
+      update_latest:
+        description: Advance latest and the legacy beta alias for a stable release
         required: false
         default: false
         type: boolean
@@ -109,6 +114,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_REVISION: ${{ needs.resolve.outputs.revision }}
+          PUBLISH_LATEST: ${{ inputs.update_latest }}
           PUBLISH_BETA: ${{ inputs.update_beta }}
         run: node scripts/publish-images.js
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -151,6 +157,8 @@ jobs:
           done
           test "$kind" = commit
           test "$revision" = "$RELEASE_REVISION"
+          prerelease=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then prerelease=(--prerelease); fi
           gh release create "$RELEASE_TAG" "$directory"/*.tgz "$directory/SHA256SUMS" "$directory/release.json" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --target "$RELEASE_REVISION" \
-            --draft --prerelease --title "$RELEASE_TAG" --generate-notes
+            --draft "${prerelease[@]}" --title "$RELEASE_TAG" --generate-notes

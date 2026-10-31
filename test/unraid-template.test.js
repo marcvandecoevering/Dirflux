@@ -22,7 +22,7 @@ test('Unraid project metadata cannot silently change the supplied repository ori
     assert.throws(()=>renderUnraid({...metadata,project}),/HTTPS|canonical/);
 });
 
-test('generated beta metadata escapes text and preserves restricted runtime settings',()=>{
+test('generated stable metadata escapes text and preserves restricted runtime settings',()=>{
   const {template,profile}=renderUnraid(metadata);
   assert.match(template,/<Name>Example &amp; files<\/Name>/);assert.match(profile,/<Profile>Example &amp; files /);
   assert.match(template,/<Privileged>false<\/Privileged>/);
@@ -32,6 +32,6 @@ test('generated beta metadata escapes text and preserves restricted runtime sett
   assert.match(template,/Target="\/config" Default="\/mnt\/user\/appdata\/example-files"/);
   assert.match(template,/<TemplateURL>https:\/\/raw.githubusercontent.com\/example\/example-files\/main\/templates\/example-files.xml<\/TemplateURL>/);
   assert.match(template,/Target="INITIAL_ADMIN_PASSWORD".*Mask="true"/);
-  assert.match(template,/<Beta>true<\/Beta>/);
+  assert.match(template,/<Beta>false<\/Beta>/);
   assert.doesNotMatch(template,/docker.sock|<MinVer>|<MaxVer>/);
 });

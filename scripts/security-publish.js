@@ -6,7 +6,7 @@ import {verifyContainerCandidate,verifyLoadedContainer} from './verify-container
 
 const directory=path.resolve(process.env.SECURITY_DIR),plan=json(path.join(directory,'plan.json'));
 const {GITHUB_REPOSITORY:repository,GITHUB_RUN_ID:run,GITHUB_RUN_ATTEMPT:attempt,GH_TOKEN:token}=process.env;
-if(!/^\d+$/.test(run)||!/^\d+$/.test(attempt)||plan.image!=='ghcr.io/'+repository.toLowerCase()||plan.channel!=='beta')throw new Error('Invalid publication context');
+if(!/^\d+$/.test(run)||!/^\d+$/.test(attempt)||plan.image!=='ghcr.io/'+repository.toLowerCase()||plan.channel!=='latest')throw new Error('Invalid publication context');
 const git=(...args)=>command('git',...args),docker=(...args)=>command('docker',...args);
 if(git('rev-parse','HEAD')!==plan.revision||git('status','--porcelain'))throw new Error('Candidate source mismatch');
 async function unchanged() {
@@ -47,6 +47,8 @@ try {
   git('tag',unique,plan.revision);git('push','--atomic','origin','HEAD:refs/heads/main',`refs/tags/${unique}`);
   docker('buildx','imagetools','create','--tag',`${plan.image}:${plan.channel}`,`${plan.image}@${digest}`);
   if(inspect(`${plan.image}:${plan.channel}`).digest!==digest)throw new Error('Channel verification failed');
+  docker('buildx','imagetools','create','--tag',`${plan.image}:beta`,`${plan.image}@${digest}`);
+  if(inspect(`${plan.image}:beta`).digest!==digest)throw new Error('Compatibility channel verification failed');
   write(path.join(directory,'published.json'),{reference,digest,revision:plan.revision,channel:plan.channel,published});
   fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,`Published verified security patch: ${reference}@${digest}. Unraid channel :${plan.channel} updated.\n`);
 } finally {docker('logout','ghcr.io');}

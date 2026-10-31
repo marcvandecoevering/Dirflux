@@ -11,6 +11,7 @@ const command=(name,...args)=>execFileSync(name,args,{encoding:'utf8',timeout:60
 const gh=(...args)=>command('gh',...args);
 const docker=(...args)=>command('docker',...args);
 const manifest=JSON.parse(await fs.readFile('package.json','utf8'));
+if(process.env.PUBLISH_LATEST==='true'&&!/^\d+\.\d+\.\d+$/.test(manifest.version))throw new Error('Only stable versions can advance latest.');
 if(tag!=='v'+manifest.version||command('git','rev-parse','HEAD')!==revision)throw new Error('Release source/version mismatch.');
 let remote=JSON.parse(gh('api',`repos/${repository}/git/ref/tags/${tag}`)).object;
 for(let depth=0;remote.type==='tag'&&depth<16;depth++)remote=JSON.parse(gh('api',`repos/${repository}/git/tags/${remote.sha}`)).object;
@@ -47,6 +48,13 @@ try {
   const info=JSON.parse(docker('buildx','imagetools','inspect',reference,'--format','{{json .Manifest}}'));
   const index=JSON.parse(docker('buildx','imagetools','inspect',reference,'--raw'));
   if(index.manifests?.length!==2||published.some(item=>!index.manifests.some(entry=>entry.digest===item.digest&&`${entry.platform?.os}/${entry.platform?.architecture}`===item.platform)))throw new Error('Published platform index does not match verified images.');
+  if(process.env.PUBLISH_LATEST==='true') {
+    for(const alias of ['latest','beta']) {
+      docker('buildx','imagetools','create','--tag',image+':'+alias,image+'@'+info.digest);
+      const channel=JSON.parse(docker('buildx','imagetools','inspect',image+':'+alias,'--format','{{json .Manifest}}'));
+      if(channel.digest!==info.digest)throw new Error('Stable channel does not match the verified release.');
+    }
+  }
   if(process.env.PUBLISH_BETA==='true') {
     if(!/^\d+\.\d+\.\d+-beta\.\d+$/.test(version))throw new Error('Only beta versions can advance the beta channel.');
     docker('buildx','imagetools','create','--tag',image+':beta',image+'@'+info.digest);

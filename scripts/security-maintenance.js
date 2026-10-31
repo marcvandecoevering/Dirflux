@@ -48,7 +48,7 @@ async function registryConfig(image,manifest) {
 export function inspect(ref) {return JSON.parse(command('docker','buildx','imagetools','inspect',ref,'--format','{{json .Manifest}}'));}
 async function prepare() {
   const directory=path.resolve(process.env.SECURITY_DIR);fs.mkdirSync(directory,{recursive:true});
-  const image='ghcr.io/'+process.env.GITHUB_REPOSITORY.toLowerCase(),channel='beta';
+  const image='ghcr.io/'+process.env.GITHUB_REPOSITORY.toLowerCase(),channel='latest';
   const digest=inspect(`${image}:${channel}`).digest;
   if(!/^sha256:[a-f0-9]{64}$/.test(digest))throw new Error('Invalid channel digest');
   const index=JSON.parse(command('docker','buildx','imagetools','inspect',`${image}@${digest}`,'--raw'));

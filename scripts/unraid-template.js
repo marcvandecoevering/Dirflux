@@ -40,8 +40,8 @@ export function renderUnraid({name,slug,project,image,icon,branch='main',templat
   <ReadMe>${xml(raw+'/README.md')}</ReadMe>
   <Category>Tools:System</Category>
   <License>BSD-2-Clause</License>
-  <Beta>true</Beta>
-  <Overview>${xml(name)} is a self-hosted file manager with two panes, uploads, previews, editing and share links. Beta release. Set the initial administrator password during installation, then sign in as admin. Protect remote access with HTTPS.</Overview>
+  <Beta>false</Beta>
+  <Overview>${xml(name)} is a self-hosted file manager with two panes, uploads, previews, editing and share links. Set the initial administrator password during installation, then sign in as admin. Protect remote access with HTTPS.</Overview>
   <Requires>Use separate Files and Appdata folders. Empty mount roots are initialized automatically; existing files and permissions are preserved.</Requires>
 ${config('Web interface','8080','8080','Port','tcp','HTTP port. Use an HTTPS proxy for remote access.')}
 ${config('Files','/files','/mnt/user/'+slug,'Path','rw','Only this folder is exposed through the file manager. Keep it outside Appdata.')}
@@ -73,5 +73,5 @@ if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.ur
   await fs.mkdir(path.join(output,'templates'));
   await fs.writeFile(path.join(output,'templates',metadata.slug+'.xml'),rendered.template,{flag:'wx'});
   await fs.writeFile(path.join(output,'ca_profile.xml'),rendered.profile,{flag:'wx'});
-  console.log('Created beta submission files. Publish verified source/image/icon, then run Community Apps Validate and Scan; this generator does not submit anything.');
+  console.log('Created submission files. Publish verified source/image/icon, then run Community Apps Validate and Scan; this generator does not submit anything.');
 }

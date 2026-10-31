@@ -40,11 +40,11 @@ Follow the [native installation, update and recovery procedure](NATIVE_DEPLOYMEN
 
 Since beta.11 the default internal port is **8080**. For an existing container, change the container side of its port mapping (for example `8093:8094` becomes `8093:8080`) and recreate it with the same storage mounts. Update explicit `PORT` or `LISTENERS` overrides if present. Unraid users must also update the WebUI placeholder; see [upgrade instructions](UNRAID.md#updates). Native installations without an explicit port now listen on 8080; adjust a direct reverse-proxy upstream accordingly.
 
-The public `ghcr.io/marcvandecoevering/dirflux:beta` image supports Linux AMD64 and ARM64. Map separate host folders to `/files` and `/config`, publish container port `8080`, and set `INITIAL_ADMIN_PASSWORD` to a password of 12–1024 characters. Sign in as `admin`. Use an HTTPS proxy for remote access.
+The public `ghcr.io/marcvandecoevering/dirflux:latest` image supports Linux AMD64 and ARM64. Map separate host folders to `/files` and `/config`, publish container port `8080`, and set `INITIAL_ADMIN_PASSWORD` to a password of 12–1024 characters. Sign in as `admin`. Use an HTTPS proxy for remote access.
 
 New empty mount roots are initialized for `PUID=99` and `PGID=100` by default; existing files and permissions are left untouched. For Unraid, follow the [installation guide](UNRAID.md). An explicit non-root Docker user is supported but bypasses initialization and requires writable mounts.
 
-The `beta` tag receives verified releases. Pull the new image and recreate the container with the same mounts to update. Stop the app and back up both directories first. Versioned images, native downloads, checksums and scan reports remain available in [Releases](https://github.com/marcvandecoevering/Dirflux/releases).
+The `latest` tag receives verified releases. Pull the new image and recreate the container with the same mounts to update. Stop the app and back up both directories first. Versioned images, native downloads, checksums and scan reports remain available in [Releases](https://github.com/marcvandecoevering/Dirflux/releases).
 
 ## Build Docker locally
 
@@ -67,7 +67,7 @@ The smoke test uses temporary data, UID/GID 99:100, a read-only container root, 
 
 ## Configuration
 
-Docker beta.3 supports `PUID` / `PGID` (default 99/100) for empty-folder initialization and privilege dropping. `INITIAL_ADMIN_PASSWORD` and optional `INITIAL_ADMIN_NAME` (default `admin`) create an account only when none exists; they never reset existing accounts. The `beta` image tag receives verified releases; version tags remain fixed.
+Docker beta.3 supports `PUID` / `PGID` (default 99/100) for empty-folder initialization and privilege dropping. `INITIAL_ADMIN_PASSWORD` and optional `INITIAL_ADMIN_NAME` (default `admin`) create an account only when none exists; they never reset existing accounts. The `latest` image tag receives verified releases; version tags remain fixed.
 
 The [original configuration comparison](CONFIG_PARITY.md) records supported equivalents, intentional differences and remaining gaps.
 
