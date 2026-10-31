@@ -1,6 +1,6 @@
 {
   "name": "dirflux",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "license": "BSD-2-Clause",
   "files": [
@@ -44,6 +44,11 @@
     "archiver": "8.0.0",
     "express": "5.3.0",
     "picomatch": "4.0.7"
+  },
+  "overrides": {
+    "readdir-glob": {
+      "minimatch": "11.0.3"
+    }
   },
   "devDependencies": {
     "@codemirror/language-data": "6.5.2",
