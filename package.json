@@ -57,7 +57,7 @@
     "@uiw/codemirror-themes-all": "4.25.12",
     "codemirror": "6.0.2",
     "esbuild": "0.28.2",
-    "pdfjs-dist": "6.4.299"
+    "pdfjs-dist": "6.5.438"
   },
   "repository": {
     "type": "git",
